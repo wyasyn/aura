@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aurora SkinSense – AI Skin Intelligence</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            aurora: { 50:'#e6faf4', 100:'#b3f0dc', 200:'#80e6c4', 300:'#4ddcac', 400:'#26d494', 500:'#0d9488', 600:'#0a766c', 700:'#075850', 800:'#053a34', 900:'#0d1a14', 950:'#070f0b' },
+            gold: { 400:'#e2be6a', 500:'#c9a84c', 600:'#a88a30' },
+            cream: '#e8e0d4',
+            moss: '#8a9b8e',
+          },
+          fontFamily: { display:['Cormorant Garamond','serif'], body:['DM Sans','sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root { --bg:#070f0b; --bg2:#0d1a14; --fg:#e8e0d4; --muted:#8a9b8e; --accent:#c9a84c; --accent2:#2dd4a8; --card:rgba(13,26,20,0.7); --border:rgba(45,212,168,0.15); --glass:rgba(13,26,20,0.5); }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--fg); overflow-x:hidden; }
+    h1,h2,h3,h4,h5 { font-family:'Cormorant Garamond',serif; }
+
+    /* Aurora background */
+    .aurora-bg { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+    .aurora-blob { position:absolute; border-radius:50%; filter:blur(120px); opacity:0.15; animation:float 20s ease-in-out infinite; }
+    .aurora-blob:nth-child(1) { width:600px;height:600px;background:radial-gradient(circle,#0d9488,transparent);top:-200px;left:-100px;animation-delay:0s; }
+    .aurora-blob:nth-child(2) { width:500px;height:500px;background:radial-gradient(circle,#c9a84c,transparent);bottom:-150px;right:-100px;animation-delay:-7s; }
+    .aurora-blob:nth-child(3) { width:400px;height:400px;background:radial-gradient(circle,#2dd4a8,transparent);top:50%;left:50%;transform:translate(-50%,-50%);animation-delay:-14s; }
+    @keyframes float { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(40px,-30px) scale(1.05)} 66%{transform:translate(-30px,20px) scale(0.95)} }
+
+    /* Glass card */
+    .glass { background:var(--glass); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid var(--border); border-radius:16px; }
+
+    /* Step transitions */
+    .step-section { display:none; opacity:0; transform:translateY(20px); transition:opacity 0.6s ease, transform 0.6s ease; }
+    .step-section.active { display:block; opacity:1; transform:translateY(0); }
+
+    /* Camera guide overlay */
+    .cam-guide { position:absolute; inset:0; pointer-events:none; }
+    .cam-guide::before { content:''; position:absolute; top:50%;left:50%; width:200px;height:260px; transform:translate(-50%,-50%); border:2px solid rgba(201,168,76,0.5); border-radius:50%; box-shadow:0 0 40px rgba(201,168,76,0.15), inset 0 0 40px rgba(201,168,76,0.05); }
+    .cam-guide::after { content:'Position face in oval'; position:absolute; top:calc(50% + 150px); left:50%; transform:translateX(-50%); color:var(--accent); font-size:13px; font-weight:500; letter-spacing:0.05em; }
+
+    /* Score bar animation */
+    .score-fill { height:100%; border-radius:4px; transition:width 1.2s cubic-bezier(0.22,1,0.36,1); width:0; }
+
+    /* Product card hover */
+    .product-card { transition:transform 0.3s ease, box-shadow 0.3s ease; }
+    .product-card:hover { transform:translateY(-4px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+
+    /* Match ring */
+    .match-ring { position:relative; width:64px;height:64px; }
+    .match-ring svg { transform:rotate(-90deg); }
+    .match-ring .value { position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px; }
+
+    /* Quiz option */
+    .quiz-opt { cursor:pointer; transition:all 0.25s ease; border:1px solid var(--border); border-radius:12px; padding:16px 20px; }
+    .quiz-opt:hover { border-color:var(--accent); background:rgba(201,168,76,0.05); }
+    .quiz-opt.selected { border-color:var(--accent); background:rgba(201,168,76,0.1); box-shadow:0 0 20px rgba(201,168,76,0.1); }
+
+    /* Processing step */
+    .proc-step { opacity:0; transform:translateX(-10px); transition:all 0.4s ease; }
+    .proc-step.active { opacity:1; transform:translateX(0); }
+    .proc-step.done { opacity:0.5; }
+    .proc-step.done .proc-icon { color:var(--accent2); }
+
+    /* Ingredient badge */
+    .ingr-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; letter-spacing:0.03em; }
+    .ingr-safe { background:rgba(45,212,168,0.12); color:#2dd4a8; }
+    .ingr-caution { background:rgba(201,168,76,0.12); color:#c9a84c; }
+    .ingr-avoid { background:rgba(239,100,97,0.12); color:#ef6461; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+    /* Toast */
+    .toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(100px); z-index:1000; padding:14px 28px; border-radius:12px; font-size:14px; font-weight:500; transition:transform 0.4s cubic-bezier(0.22,1,0.36,1); pointer-events:none; }
+    .toast.show { transform:translateX(-50%) translateY(0); }
+
+    /* Pulse ring on capture btn */
+    @keyframes pulse-ring { 0%{box-shadow:0 0 0 0 rgba(201,168,76,0.4)} 100%{box-shadow:0 0 0 20px rgba(201,168,76,0)} }
+    .pulse-ring { animation:pulse-ring 2s ease-out infinite; }
+
+    /* Stagger children */
+    .stagger > * { opacity:0; transform:translateY(15px); animation:stagger-in 0.5s ease forwards; }
+    .stagger > *:nth-child(1){animation-delay:0.1s} .stagger > *:nth-child(2){animation-delay:0.2s} .stagger > *:nth-child(3){animation-delay:0.3s}
+    .stagger > *:nth-child(4){animation-delay:0.4s} .stagger > *:nth-child(5){animation-delay:0.5s} .stagger > *:nth-child(6){animation-delay:0.6s}
+    .stagger > *:nth-child(7){animation-delay:0.7s} .stagger > *:nth-child(8){animation-delay:0.8s}
+    @keyframes stagger-in { to { opacity:1; transform:translateY(0); } }
+
+    @media(prefers-reduced-motion:reduce){ *, *::before, *::after { animation-duration:0.01ms!important; transition-duration:0.01ms!important; } }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Aurora Background -->
+  <div class="aurora-bg" aria-hidden="true">
+    <div class="aurora-blob"></div>
+    <div class="aurora-blob"></div>
+    <div class="aurora-blob"></div>
+  </div>
+
+  <!-- Header -->
+  <header class="relative z-10 px-6 py-5 flex items-center justify-between max-w-7xl mx-auto">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-full bg-gradient-to-br from-aurora-500 to-gold-500 flex items-center justify-center">
+        <i class="fa-solid fa-spa text-aurora-950 text-sm"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-semibold tracking-wide font-display leading-none">Aurora SkinSense</h1>
+        <span class="text-[10px] tracking-[0.2em] uppercase text-moss">AI Skin Intelligence</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-moss">
+      <i class="fa-solid fa-shield-halved text-aurora-500"></i>
+      <span>HIPAA Compliant</span>
+    </div>
+  </header>
+
+  <main class="relative z-10 max-w-5xl mx-auto px-4 pb-20">
+
+    <!-- Step Indicator -->
+    <nav id="step-nav" class="flex items-center justify-center gap-2 mb-10" aria-label="Analysis steps">
+      <button class="step-dot active" data-step="1" aria-label="Step 1: Skin Capture"><span class="sr-only">Step 1</span></button>
+      <div class="w-8 h-px bg-aurora-800"></div>
+      <button class="step-dot" data-step="2" aria-label="Step 2: Dosha Quiz"><span class="sr-only">Step 2</span></button>
+      <div class="w-8 h-px bg-aurora-800"></div>
+      <button class="step-dot" data-step="3" aria-label="Step 3: Climate"><span class="sr-only">Step 3</span></button>
+      <div class="w-8 h-px bg-aurora-800"></div>
+      <button class="step-dot" data-step="4" aria-label="Step 4: Analysis"><span class="sr-only">Step 4</span></button>
+      <div class="w-8 h-px bg-aurora-800"></div>
+      <button class="step-dot" data-step="5" aria-label="Step 5: Results"><span class="sr-only">Step 5</span></button>
+    </nav>
+    <style>
+      .step-dot { width:32px;height:32px;border-radius:50%;border:2px solid var(--border);background:transparent;cursor:pointer;transition:all 0.3s ease;position:relative;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted); }
+      .step-dot.active { border-color:var(--accent); color:var(--accent); box-shadow:0 0 16px rgba(201,168,76,0.2); }
+      .step-dot.completed { border-color:var(--accent2); background:var(--accent2); color:var(--bg); }
+      .step-dot::after { content:attr(data-step); }
+      .step-dot.completed::after { content:'\f00c'; font-family:'Font Awesome 6 Free'; font-weight:900; font-size:12px; }
+    </style>
+
+    <!-- STEP 1: Skin Capture -->
+    <section id="step-1" class="step-section active" aria-label="Skin capture">
+      <div class="text-center mb-8">
+        <h2 class="text-4xl md:text-5xl font-display font-light mb-3">Capture Your Skin</h2>
+        <p class="text-moss max-w-lg mx-auto">Position your face within the guide. Our AI engine will analyze skin texture, tone, hydration, and visible concerns in real-time.</p>
+      </div>
+      <div class="glass p-4 max-w-lg mx-auto">
+        <div class="relative rounded-xl overflow-hidden bg-aurora-950 aspect-[3/4] max-h-[480px]">
+          <video id="cam-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+          <canvas id="cam-canvas" class="hidden"></canvas>
+          <img id="cam-preview" class="w-full h-full object-cover hidden" alt="Captured skin image">
+          <div id="cam-guide" class="cam-guide"></div>
+          <div id="cam-placeholder" class="absolute inset-0 flex flex-col items-center justify-center gap-4 text-moss">
+            <i class="fa-solid fa-camera text-4xl text-aurora-700"></i>
+            <span class="text-sm">Initializing camera...</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 mt-4">
+          <button id="btn-capture" class="flex-1 py-3 rounded-xl bg-gold-500 text-aurora-950 font-semibold text-sm hover:bg-gold-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed pulse-ring" disabled>
+            <i class="fa-solid fa-circle mr-2"></i>Capture
+          </button>
+          <label class="flex-1 py-3 rounded-xl border border-aurora-800 text-center text-sm font-medium cursor-pointer hover:border-gold-500 hover:text-gold-500 transition-colors">
+            <i class="fa-solid fa-upload mr-2"></i>Upload
+            <input type="file" id="file-upload" accept="image/*" class="hidden">
+          </label>
+          <button id="btn-skip" class="py-3 px-4 rounded-xl border border-aurora-800 text-sm text-moss hover:border-moss hover:text-cream transition-colors" title="Use demo data">
+            Skip
+          </button>
+        </div>
+        <p id="cam-status" class="text-xs text-moss text-center mt-3"></p>
+      </div>
+    </section>
+
+    <!-- STEP 2: Dosha Quiz -->
+    <section id="step-2" class="step-section" aria-label="Ayurvedic dosha quiz">
+      <div class="text-center mb-8">
+        <h2 class="text-4xl md:text-5xl font-display font-light mb-3">Discover Your Dosha</h2>
+        <p class="text-moss max-w-lg mx-auto">Ancient Ayurvedic wisdom meets modern skin science. Answer five questions to reveal your constitutional skin type.</p>
+      </div>
+      <div class="max-w-xl mx-auto">
+        <div id="quiz-progress" class="flex gap-1 mb-6">
+          <div class="h-1 flex-1 rounded bg-gold-500 transition-all duration-300" style="width:0%"></div>
+          <div class="h-1 flex-1 rounded bg-aurora-800"></div>
+          <div class="h-1 flex-1 rounded bg-aurora-800"></div>
+          <div class="h-1 flex-1 rounded bg-aurora-800"></div>
+          <div class="h-1 flex-1 rounded bg-aurora-800"></div>
+        </div>
+        <div id="quiz-container"></div>
+      </div>
+    </section>
+
+    <!-- STEP 3: Climate -->
+    <section id="step-3" class="step-section" aria-label="Climate intelligence">
+      <div class="text-center mb-8">
+        <h2 class="text-4xl md:text-5xl font-display font-light mb-3">Climate Intelligence</h2>
+        <p class="text-moss max-w-lg mx-auto">Your skin's needs change with the environment. We factor in humidity, UV index, temperature, and seasonal conditions.</p>
+      </div>
+      <div class="glass p-6 max-w-lg mx-auto">
+        <div id="climate-loading" class="text-center py-8">
+          <i class="fa-solid fa-location-crosshairs text-3xl text-gold-500 animate-pulse mb-4 block"></i>
+          <p class="text-moss text-sm">Detecting your location and climate conditions...</p>
+        </div>
+        <div id="climate-data" class="hidden">
+          <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-aurora-950/50 rounded-xl p-4 text-center">
+              <i class="fa-solid fa-temperature-half text-gold-500 text-xl mb-2"></i>
+              <div id="cl-temp" class="text-2xl font-display font-semibold">--</div>
+              <div class="text-xs text-moss">Temperature</div>
+            </div>
+            <div class="bg-aurora-950/50 rounded-xl p-4 text-center">
+              <i class="fa-solid fa-droplet text-aurora-400 text-xl mb-2"></i>
+              <div id="cl-humidity" class="text-2xl font-display font-semibold">--</div>
+              <div class="text-xs text-moss">Humidity</div>
+            </div>
+            <div class="bg-aurora-950/50 rounded-xl p-4 text-center">
+              <i class="fa-solid fa-sun text-gold-400 text-xl mb-2"></i>
+              <div id="cl-uv" class="text-2xl font-display font-semibold">--</div>
+              <div class="text-xs text-moss">UV Index</div>
+            </div>
+            <div class="bg-aurora-950/50 rounded-xl p-4 text-center">
+              <i class="fa-solid fa-leaf text-aurora-400 text-xl mb-2"></i>
+              <div id="cl-season" class="text-2xl font-display font-semibold">--</div>
+              <div class="text-xs text-moss">Season</div>
+            </div>
+          </div>
+          <div id="cl-location" class="text-center text-sm text-moss mb-6"><i class="fa-solid fa-map-pin mr-1"></i> --</div>
+          <div class="mb-4">
+            <label class="text-xs text-moss uppercase tracking-wider mb-2 block">Adjust manually if needed</label>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-moss mb-1 block">Humidity (%)</label>
+                <input type="range" id="cl-hum-slider" min="0" max="100" value="50" class="w-full accent-aurora-500">
+              </div>
+              <div>
+                <label class="text-xs text-moss mb-1 block">UV Index</label>
+                <input type="range" id="cl-uv-slider" min="0" max="11" value="5" class="w-full accent-gold-500">
+              </div>
+            </div>
+          </div>
+          <button id="btn-climate-next" class="w-full py-3 rounded-xl bg-gold-500 text-aurora-950 font-semibold text-sm hover:bg-gold-400 transition-colors">
+            Continue to Analysis <i class="fa-solid fa-arrow-right ml-2"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 4: Processing -->
+    <section id="step-4" class="step-section" aria-label="Processing analysis">
+      <div class="text-center mb-10">
+        <h2 class="text-4xl md:text-5xl font-display font-light mb-3">Analyzing Your Skin</h2>
+        <p class="text-moss">Our AI engine is processing multiple intelligence layers...</p>
+      </div>
+      <div class="max-w-md mx-auto space-y-3" id="proc-steps"></div>
+      <div class="max-w-xs mx-auto mt-8">
+        <div class="h-1.5 bg-aurora-800 rounded-full overflow-hidden">
+          <div id="proc-bar" class="h-full bg-gradient-to-r from-aurora-500 to-gold-500 rounded-full transition-all duration-700 ease-out" style="width:0%"></div>
+        </div>
+        <p id="proc-pct" class="text-center text-xs text-moss mt-2">0%</p>
+      </div>
+    </section>
+
+    <!-- STEP 5: Results -->
+    <section id="step-5" class="step-section" aria-label="Results and recommendations">
+      <div class="text-center mb-10">
+        <h2 class="text-4xl md:text-5xl font-display font-light mb-3">Your Skin Intelligence Report</h2>
+        <p class="text-moss">Personalized insights powered by AI, Ayurveda, and climate science</p>
+      </div>
+
+      <!-- Top row: Radar + Dosha + Climate -->
+      <div class="grid md:grid-cols-3 gap-4 mb-8">
+        <!-- Radar Chart -->
+        <div class="glass p-5">
+          <h3 class="text-lg font-display font-semibold mb-1">Skin Metrics</h3>
+          <p class="text-xs text-moss mb-3">AI-detected concern levels</p>
+          <canvas id="radar-canvas" width="280" height="280" class="mx-auto"></canvas>
+        </div>
+        <!-- Dosha Profile -->
+        <div class="glass p-5">
+          <h3 class="text-lg font-display font-semibold mb-1">Dosha Profile</h3>
+          <p class="text-xs text-moss mb-3">Ayurvedic constitution analysis</p>
+          <div id="dosha-result"></div>
+        </div>
+        <!-- Climate -->
+        <div class="glass p-5">
+          <h3 class="text-lg font-display font-semibold mb-1">Climate Adaptation</h3>
+          <p class="text-xs text-moss mb-3">Environment-informed guidance</p>
+          <div id="climate-result"></div>
+        </div>
+      </div>
+
+      <!-- Score Bars -->
+      <div class="glass p-6 mb-8">
+        <h3 class="text-lg font-display font-semibold mb-4">Detailed Skin Scores</h3>
+        <div id="score-bars" class="space-y-3"></div>
+      </div>
+
+      <!-- Recommendations -->
+      <div class="mb-6 flex items-center justify-between">
+        <div>
+          <h3 class="text-2xl font-display font-semibold">Personalized Recommendations</h3>
+          <p class="text-sm text-moss">Ranked by multi-signal compatibility with your skin profile</p>
+        </div>
+        <div class="flex gap-2">
+          <button class="rec-filter active text-xs px-3 py-1.5 rounded-lg border border-aurora-800 transition-colors" data-filter="all">All</button>
+          <button class="rec-filter text-xs px-3 py-1.5 rounded-lg border border-aurora-800 text-moss transition-colors" data-filter="serum">Serums</button>
+          <button class="rec-filter text-xs px-3 py-1.5 rounded-lg border border-aurora-800 text-moss transition-colors" data-filter="moisturizer">Moisturizers</button>
+          <button class="rec-filter text-xs px-3 py-1.5 rounded-lg border border-aurora-800 text-moss transition-colors" data-filter="treatment">Treatments</button>
+        </div>
+      </div>
+      <div id="rec-grid" class="grid md:grid-cols-2 gap-4 mb-8 stagger"></div>
+
+      <!-- Restart -->
+      <div class="text-center mt-12">
+        <button id="btn-restart" class="px-8 py-3 rounded-xl border border-aurora-800 text-sm text-moss hover:border-gold-500 hover:text-gold-500 transition-colors">
+          <i class="fa-solid fa-rotate-left mr-2"></i>New Analysis
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast -->
+  <div id="toast" class="toast glass text-cream"></div>
+
+  <!-- Footer -->
+  <footer class="relative z-10 text-center py-6 text-xs text-moss border-t border-aurora-800/50">
+    Aurora SkinSense &mdash; AI Skin Intelligence Platform &middot; Data processed locally &middot; No images stored
+  </footer>
+
+  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+  <script type="text/babel" data-presets="typescript">
+// ============================================================
+// AURORA SKINSENSE – RECOMMENDATION ENGINE (TypeScript)
+// ============================================================
+
+// ==================== INTERFACES ====================
+
+interface SkinScores {
+  pigmentation: number; redness: number; wrinkles: number;
+  pores: number; hydration: number; aging: number;
+  texture: number; sensitivity: number; overall: number;
+}
+
+type DoshaType = 'vata' | 'pitta' | 'kapha' | 'tridoshic';
+type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+
+interface DoshaProfile {
+  primary: DoshaType; secondary: DoshaType;
+  scores: { vata: number; pitta: number; kapha: number };
+  skinQualities: string[]; imbalances: string[];
+}
+
+interface ClimateData {
+  temperature: number; humidity: number; uvIndex: number;
+  season: Season; pollution: 'low' | 'moderate' | 'high'; location: string;
+}
+
+interface Ingredient {
+  inciName: string; commonName: string;
+  functions: string[]; safetyScore: number; comedogenic: number;
+  doshaAffinity: DoshaType[]; climateSuitability: Season[];
+  ayurvedicProperties: string[]; targetsConcerns: string[];
+}
+
+interface Product {
+  id: string; name: string; category: string; subCategory: string;
+  description: string; price: number; currency: string;
+  ingredients: Ingredient[]; targetConcerns: string[];
+  doshaCompatibility: DoshaType[]; climateSuitability: Season[];
+  skinTypes: string[]; rating: number; reviewCount: number;
+  image: string; ayurvedicNotes: string;
+}
+
+interface Recommendation {
+  product: Product; matchScore: number; reasoning: string[];
+  concernMatch: number; doshaMatch: number;
+  climateMatch: number; ingredientSafety: number;
+}
+
+// ==================== INGREDIENT DATABASE ====================
+
+const INGREDIENTS: Ingredient[] = [
+  { inciName:'Ascorbic Acid', commonName:'Vitamin C', functions:['Antioxidant','Brightening','Collagen Synthesis'], safetyScore:9, comedogenic:0, doshaAffinity:['pitta','kapha'], climateSuitability:['summer','spring'], ayurvedicProperties:['Rasayana','Bhringraj-supporting'], targetsConcerns:['pigmentation','aging','texture'] },
+  { inciName:'Niacinamide', commonName:'Vitamin B3', functions:['Barrier Repair','Pore Minimizing','Anti-Inflammatory'], safetyScore:10, comedogenic:0, doshaAffinity:['vata','pitta','kapha'], climateSuitability:['spring','summer','autumn','winter'], ayurvedicProperties:['Tridoshic'], targetsConcerns:['pores','redness','texture','pigmentation'] },
+  { inciName:'Hyaluronic Acid', commonName:'Hyaluronic Acid', functions:['Humectant','Hydration','Plumping'], safetyScore:10, comedogenic:0, doshaAffinity:['vata'], climateSuitability:['winter','autumn'], ayurvedicProperties:['Snigdha','Vata-pacifying'], targetsConcerns:['hydration','wrinkles','texture'] },
+  { inciName:'Bakuchiol', commonName:'Bakuchiol', functions:['Anti-Aging','Retinol Alternative','Cell Turnover'], safetyScore:9, comedogenic:1, doshaAffinity:['vata','pitta'], climateSuitability:['autumn','winter','spring'], ayurvedicProperties:['Rasayana','Babchi-derived'], targetsConcerns:['wrinkles','aging','texture','pores'] },
+  { inciName:'Curcuma Longa Extract', commonName:'Turmeric', functions:['Anti-Inflammatory','Brightening','Antioxidant'], safetyScore:9, comedogenic:0, doshaAffinity:['kapha','pitta'], climateSuitability:['spring','summer','autumn'], ayurvedicProperties:['Kapha-reducing','Pitta-soothing','Haridra'], targetsConcerns:['pigmentation','redness','sensitivity'] },
+  { inciName:'Azadirachta Indica Extract', commonName:'Neem', functions:['Antibacterial','Anti-Inflammatory','Purifying'], safetyScore:9, comedogenic:0, doshaAffinity:['kapha','pitta'], climateSuitability:['summer','spring'], ayurvedicProperties:['Kapha-pacifying','Nimba','Shodhana'], targetsConcerns:['pores','texture','redness'] },
+  { inciName:'Aloe Barbadensis Leaf Juice', commonName:'Aloe Vera', functions:['Soothing','Hydrating','Healing'], safetyScore:10, comedogenic:0, doshaAffinity:['pitta','vata'], climateSuitability:['summer','spring'], ayurvedicProperties:['Pitta-pacifying','Kumari','Sita'], targetsConcerns:['redness','sensitivity','hydration'] },
+  { inciName:'Crocus Sativus Extract', commonName:'Saffron', functions:['Brightening','Antioxidant','Luxury Active'], safetyScore:9, comedogenic:0, doshaAffinity:['vata','pitta'], climateSuitability:['autumn','winter'], ayurvedicProperties:['Rasayana','Varnya','Kumkuma'], targetsConcerns:['pigmentation','aging','texture'] },
+  { inciName:'Santalum Album Oil', commonName:'Sandalwood', functions:['Soothing','Anti-Aging','Aromatic'], safetyScore:8, comedogenic:0, doshaAffinity:['pitta','vata'], climateSuitability:['summer','spring'], ayurvedicProperties:['Pitta-pacifying','Chandana','Prashamana'], targetsConcerns:['redness','sensitivity','aging'] },
+  { inciName:'Ocimum Sanctum Extract', commonName:'Tulsi (Holy Basil)', functions:['Adaptogen','Antioxidant','Purifying'], safetyScore:9, comedogenic:0, doshaAffinity:['kapha','vata'], climateSuitability:['spring','summer','autumn'], ayurvedicProperties:['Tridoshic','Tulsi','Rasayana'], targetsConcerns:['texture','pores','aging'] },
+  { inciName:'Withania Somnifera Extract', commonName:'Ashwagandha', functions:['Adaptogen','Anti-Stress','Anti-Aging'], safetyScore:9, comedogenic:0, doshaAffinity:['vata','kapha'], climateSuitability:['autumn','winter'], ayurvedicProperties:['Vata-pacifying','Rasayana','Bala'], targetsConcerns:['aging','wrinkles','hydration'] },
+  { inciName:'Bacopa Monnieri Extract', commonName:'Brahmi', functions:['Antioxidant','Calming','Cell Renewal'], safetyScore:9, comedogenic:0, doshaAffinity:['vata','pitta'], climateSuitability:['spring','autumn'], ayurvedicProperties:['Vata-pacifying','Medhya','Rasayana'], targetsConcerns:['sensitivity','redness','texture'] },
+  { inciName:'Simmondsia Chinensis Seed Oil', commonName:'Jojoba Oil', functions:['Emollient','Barrier Repair','Sebum Balancing'], safetyScore:10, comedogenic:2, doshaAffinity:['vata','kapha'], climateSuitability:['winter','autumn','spring'], ayurvedicProperties:['Snigdha','Vata-soothing'], targetsConcerns:['hydration','texture','pores'] },
+  { inciName:'Rosa Canina Fruit Oil', commonName:'Rosehip Oil', functions:['Regenerating','Brightening','Scarring'], safetyScore:9, comedogenic:1, doshaAffinity:['vata','pitta'], climateSuitability:['autumn','winter','spring'], ayurvedicProperties:['Varnya','Rasayana'], targetsConcerns:['pigmentation','aging','texture','wrinkles'] },
+  { inciName:'Squalane', commonName:'Squalane', functions:['Emollient','Hydration','Barrier Support'], safetyScore:10, comedogenic:0, doshaAffinity:['vata','pitta','kapha'], climateSuitability:['winter','autumn','summer'], ayurvedicProperties:['Tridoshic','Snigdha'], targetsConcerns:['hydration','texture','wrinkles'] },
+  { inciName:'Centella Asiatica Extract', commonName:'Cica', functions:['Wound Healing','Anti-Inflammatory','Firming'], safetyScore:10, comedogenic:0, doshaAffinity:['pitta','vata'], climateSuitability:['spring','summer','autumn','winter'], ayurvedicProperties:['Tridoshic','Mandukaparni','Vayasthapana'], targetsConcerns:['redness','sensitivity','texture','aging'] },
+  { inciName:'Camellia Sinensis Leaf Extract', commonName:'Green Tea', functions:['Antioxidant','Anti-Inflammatory','Protection'], safetyScore:10, comedogenic:0, doshaAffinity:['pitta','kapha'], climateSuitability:['summer','spring'], ayurvedicProperties:['Kapha-reducing','Shita'], targetsConcerns:['redness','aging','pores','sensitivity'] },
+  { inciName:'Zinc Oxide', commonName:'Zinc Oxide', functions:['UV Filter','Soothing','Antibacterial'], safetyScore:9, comedogenic:0, doshaAffinity:['pitta','kapha'], climateSuitability:['spring','summer','autumn','winter'], ayurvedicProperties:['Pitta-soothing','Kapha-reducing'], targetsConcerns:['redness','sensitivity','pigmentation'] },
+  { inciName:'Glycerin', commonName:'Glycerin', functions:['Humectant','Hydration','Skin Conditioning'], safetyScore:10, comedogenic:0, doshaAffinity:['vata','pitta','kapha'], climateSuitability:['spring','summer','autumn','winter'], ayurvedicProperties:['Tridoshic','Snigdha'], targetsConcerns:['hydration','texture'] },
+  { inciName:'Retinol', commonName:'Retinol', functions:['Cell Turnover','Anti-Aging','Collagen Stimulating'], safetyScore:6, comedogenic:0, doshaAffinity:['kapha'], climateSuitability:['autumn','winter'], ayurvedicProperties:['Kapha-reducing','Aggressive'], targetsConcerns:['wrinkles','aging','texture','pores'] },
+  { inciName:'Salicylic Acid', commonName:'BHA', functions:['Exfoliant','Pore Clearing','Anti-Inflammatory'], safetyScore:7, comedogenic:0, doshaAffinity:['kapha','pitta'], climateSuitability:['summer','spring'], ayurvedicProperties:['Kapha-reducing','Shodhana'], targetsConcerns:['pores','texture','redness'] },
+  { inciName:'Tocopherol', commonName:'Vitamin E', functions:['Antioxidant','Moisturizing','Protective'], safetyScore:9, comedogenic:2, doshaAffinity:['vata','pitta'], climateSuitability:['autumn','winter','spring'], ayurvedicProperties:['Rasayana','Snigdha'], targetsConcerns:['aging','hydration','texture'] },
+  { inciName:'Panthenol', commonName:'Provitamin B5', functions:['Hydrating','Barrier Repair','Soothing'], safetyScore:10, comedogenic:0, doshaAffinity:['vata','pitta','kapha'], climateSuitability:['spring','summer','autumn','winter'], ayurvedicProperties:['Tridoshic','Sita'], targetsConcerns:['hydration','sensitivity','redness','texture'] },
+  { inciName:'Kaolin', commonName:'White Clay', functions:['Absorbent','Purifying','Gentle Exfoliant'], safetyScore:10, comedogenic:0, doshaAffinity:['kapha','pitta'], climateSuitability:['summer','spring'], ayurvedicProperties:['Kapha-reducing','Shodhana','Mrinmaya'], targetsConcerns:['pores','texture','redness'] },
+];
+
+// Helper to find ingredient
+const getIngr = (name: string): Ingredient => INGREDIENTS.find(i => i.commonName === name || i.inciName === name)!;
+
+// ==================== PRODUCT DATABASE ====================
+
+const PRODUCTS: Product[] = [
+  {
+    id:'aurora-radiance', name:'Aurora Radiance Serum', category:'serum', subCategory:'Brightening',
+    description:'A potent Vitamin C and Saffron fusion serum that targets pigmentation, uneven tone, and dullness while delivering Ayurvedic brightening actives.',
+    price:68, currency:'USD',
+    ingredients:[getIngr('Vitamin C'), getIngr('Saffron'), getIngr('Niacinamide'), getIngr('Vitamin E'), getIngr('Ferulic Acid') ?? { ...getIngr('Vitamin C'), inciName:'Ferulic Acid', commonName:'Ferulic Acid', functions:['Stabilizer','Antioxidant'], safetyScore:9, comedogenic:0, doshaAffinity:['vata','pitta','kapha'], climateSuitability:['spring','summer','autumn','winter'], ayurvedicProperties:['Tridoshic'], targetsConcerns:['pigmentation','aging'] }],
+    targetConcerns:['pigmentation','texture','aging'], doshaCompatibility:['pitta','kapha','vata'], climateSuitability:['spring','summer','autumn','winter'], skinTypes:['All'], rating:4.8, reviewCount:1247,
+    image:'https://picsum.photos/seed/radiance-serum/400/400.jpg', ayurvedicNotes:'Kumkuma (Saffron) and Amalaki-derived Vitamin C work as Varnya herbs to enhance natural radiance and clear Pitta-related pigmentation.'
+  },
+  {
+    id:'aurora-hydrate', name:'Aurora Hydrate Complex', category:'moisturizer', subCategory:'Hydration',
+    description:'Triple-weight hyaluronic acid layered with Ashwagandha and Squalane for deep, multi-level hydration that adapts to your climate.',
+    price:56, currency:'USD',
+    ingredients:[getIngr('Hyaluronic Acid'), getIngr('Squalane'), getIngr('Ashwagandha'), getIngr('Glycerin'), getIngr('Provitamin B5')],
+    targetConcerns:['hydration','wrinkles','texture'], doshaCompatibility:['vata','pitta'], climateSuitability:['autumn','winter','spring'], skinTypes:['Dry','Normal','Combination'], rating:4.9, reviewCount:983,
+    image:'https://picsum.photos/seed/hydrate-complex/400/400.jpg', ayurvedicNotes:'Ashwagandha provides adaptogenic moisture support while Hyaluronic Acid acts as a modern Snigdha (unctuous) agent for Vata-pacifying deep hydration.'
+  },
+  {
+    id:'aurora-calm', name:'Aurora Calm Balm', category:'treatment', subCategory:'Soothing',
+    description:'A cooling, anti-inflammatory rescue balm with Centella, Sandalwood, and Aloe to rapidly soothe redness, reactivity, and sensitivity.',
+    price:48, currency:'USD',
+    ingredients:[getIngr('Centella Asiatica Extract'), getIngr('Sandalwood'), getIngr('Aloe Vera'), getIngr('Niacinamide'), getIngr('Brahmi')],
+    targetConcerns:['redness','sensitivity','texture'], doshaCompatibility:['pitta','vata'], climateSuitability:['spring','summer'], skinTypes:['Sensitive','Normal','Combination'], rating:4.7, reviewCount:756,
+    image:'https://picsum.photos/seed/calm-balm/400/400.jpg', ayurvedicNotes:'Chandana (Sandalwood) and Kumari (Aloe) are classical Pitta-pacifying herbs that cool and calm inflamed skin according to Ayurvedic dermatology.'
+  },
+  {
+    id:'aurora-renew', name:'Aurora Renew Cream', category:'moisturizer', subCategory:'Anti-Aging',
+    description:'Bakuchiol-driven night cream with Rosehip Oil and Ashwagandha for gentle yet effective collagen stimulation without retinol irritation.',
+    price:72, currency:'USD',
+    ingredients:[getIngr('Bakuchiol'), getIngr('Rosehip Oil'), getIngr('Ashwagandha'), getIngr('Squalane'), getIngr('Vitamin E'), getIngr('Provitamin B5')],
+    targetConcerns:['wrinkles','aging','hydration','texture'], doshaCompatibility:['vata','pitta'], climateSuitability:['autumn','winter','spring'], skinTypes:['Dry','Normal','Mature'], rating:4.8, reviewCount:891,
+    image:'https://picsum.photos/seed/renew-cream/400/400.jpg', ayurvedicNotes:'Babchi-derived Bakuchiol offers Rasayana (rejuvenating) properties without the aggressive nature of synthetic retinoids, ideal for Vata aging patterns.'
+  },
+  {
+    id:'aurora-glow-oil', name:'Aurora Glow Oil', category:'serum', subCategory:'Nourishing',
+    description:'A luxurious face oil blending Jojoba, Rosehip, and Saffron for deep nourishment, radiant glow, and Ayurvedic skin rejuvenation.',
+    price:62, currency:'USD',
+    ingredients:[getIngr('Jojoba Oil'), getIngr('Rosehip Oil'), getIngr('Saffron'), getIngr('Vitamin E'), getIngr('Squalane')],
+    targetConcerns:['hydration','pigmentation','aging','texture'], doshaCompatibility:['vata','pitta'], climateSuitability:['autumn','winter'], skinTypes:['Dry','Normal','Mature'], rating:4.9, reviewCount:654,
+    image:'https://picsum.photos/seed/glow-oil/400/400.jpg', ayurvedicNotes:'Abhyanga-inspired oil blend using Varnya (complexion-enhancing) and Snigdha (unctuous) herbs for deep Vata nourishment and radiant Kumkuma glow.'
+  },
+  {
+    id:'aurora-purify', name:'Aurora Purify Toner', category:'treatment', subCategory:'Pore Refining',
+    description:'A BHA and Neem-infused clarifying toner that refines pores, controls excess oil, and purifies without stripping the skin barrier.',
+    price:38, currency:'USD',
+    ingredients:[getIngr('Salicylic Acid'), getIngr('Neem'), getIngr('Niacinamide'), getIngr('Green Tea'), getIngr('Glycerin')],
+    targetConcerns:['pores','texture','redness'], doshaCompatibility:['kapha','pitta'], climateSuitability:['summer','spring'], skinTypes:['Oily','Combination','Acne-prone'], rating:4.6, reviewCount:1123,
+    image:'https://picsum.photos/seed/purify-toner/400/400.jpg', ayurvedicNotes:'Nimba (Neem) and Green Tea provide Kapha-reducing Shodhana (purification) while BHA offers modern exfoliation — a synthesis of ancient and modern pore care.'
+  },
+  {
+    id:'aurora-shield', name:'Aurora Shield SPF 50', category:'treatment', subCategory:'Sun Protection',
+    description:'Mineral-only zinc oxide sunscreen with Turmeric and Green Tea for UV protection that doubles as an anti-inflammatory daily defense.',
+    price:44, currency:'USD',
+    ingredients:[getIngr('Zinc Oxide'), getIngr('Turmeric'), getIngr('Green Tea'), getIngr('Squalane'), getIngr('Niacinamide')],
+    targetConcerns:['pigmentation','redness','sensitivity','aging'], doshaCompatibility:['pitta','kapha','vata'], climateSuitability:['spring','summer','autumn','winter'], skinTypes:['All'], rating:4.7, reviewCount:1567,
+    image:'https://picsum.photos/seed/shield-spf/400/400.jpg', ayurvedicNotes:'Haridra (Turmeric) enhances Zinc Oxide\'s Pitta-soothing properties, creating a sun shield that protects while treating — aligned with Ayurvedic preventive dermatology.'
+  },
+  {
+    id:'aurora-eye-revive', name:'Aurora Eye Revive', category:'serum', subCategory:'Eye Treatment',
+    description:'A gentle yet potent eye serum with Cica, Caffeine-equivalent Tulsi, and Peptides for dark circles, fine lines, and puffiness.',
+    price:52, currency:'USD',
+    ingredients:[getIngr('Centella Asiatica Extract'), getIngr('Tulsi (Holy Basil)'), getIngr('Bakuchiol'), getIngr('Hyaluronic Acid'), getIngr('Caffeine') ?? { ...getIngr('Green Tea'), inciName:'Caffeine', commonName:'Caffeine', functions:['Decongestant','Antioxidant'], safetyScore:8, comedogenic:0, doshaAffinity:['kapha','pitta'], climateSuitability:['spring','summer','autumn','winter'], ayurvedicProperties:['Kapha-reducing'], targetsConcerns:['pores','texture'] }],
+    targetConcerns:['wrinkles','aging','texture','pigmentation'], doshaCompatibility:['vata','pitta','kapha'], climateSuitability:['spring','summer','autumn','winter'], skinTypes:['All'], rating:4.6, reviewCount:543,
+    image:'https://picsum.photos/seed/eye-revive/400/400.jpg', ayurvedicNotes:'Tulsi and Mandukaparni (Cica) target the delicate eye area with Tridoshic adaptogenic support, reducing Vata-driven fine lines and Kapha-driven puffiness.'
+  },
+  {
+    id:'aurora-night-repair', name:'Aurora Night Repair Elixir', category:'serum', subCategory:'Overnight Treatment',
+    description:'An intensive overnight treatment with Retinol, Ashwagandha, and Rosehip Oil for accelerated cell turnover and morning radiance.',
+    price:78, currency:'USD',
+    ingredients:[getIngr('Retinol'), getIngr('Ashwagandha'), getIngr('Rosehip Oil'), getIngr('Bakuchiol'), getIngr('Squalane'), getIngr('Vitamin E')],
+    targetConcerns:['wrinkles','aging','texture','pigmentation'], doshaCompatibility:['kapha','vata'], climateSuitability:['autumn','winter'], skinTypes:['Normal','Dry','Mature'], rating:4.8, reviewCount:432,
+    image:'https://picsum.photos/seed/night-repair/400/400.jpg', ayurvedicNotes:'Combines modern Retinol with Rasayana herbs (Ashwagandha) for Vayasthapana (anti-aging) — powerful overnight rejuvenation rooted in Ayurvedic night-time repair principles.'
+  },
+  {
+    id:'aurora-clay-mask', name:'Aurora Detox Clay Mask', category:'treatment', subCategory:'Mask',
+    description:'A Kaolin and Neem purifying mask that draws out impurities, minimizes pores, and leaves skin refined without over-drying.',
+    price:42, currency:'USD',
+    ingredients:[getIngr('Kaolin'), getIngr('Neem'), getIngr('Turmeric'), getIngr('Aloe Vera'), getIngr('Niacinamide')],
+    targetConcerns:['pores','texture','redness','pigmentation'], doshaCompatibility:['kapha','pitta'], climateSuitability:['summer','spring'], skinTypes:['Oily','Combination','Acne-prone'], rating:4.5, reviewCount:876,
+    image:'https://picsum.photos/seed/clay-mask/400/400.jpg', ayurvedicNotes:'Mrinmaya (clay) combined with Nimba (Neem) creates a classical Kapha-reducing Shodhana treatment, drawing out Ama (toxins) from deep within pores.'
+  },
+];
+
+// ==================== SKIN ANALYSIS ENGINE ====================
+
+class SkinAnalysisEngine {
+  analyzeFromImageData(imageData: ImageData): SkinScores {
+    const d = imageData.data;
+    const n = d.length / 4;
+    let tR=0, tG=0, tB=0, vR=0, vG=0, vB=0;
+    // First pass: means
+    for (let i=0; i<d.length; i+=4) { tR+=d[i]; tG+=d[i+1]; tB+=d[i+2]; }
+    const mR=tR/n, mG=tG/n, mB=tB/n;
+    // Second pass: variance
+    for (let i=0; i<d.length; i+=4) { vR+=(d[i]-mR)**2; vG+=(d[i+1]-mG)**2; vB+=(d[i+2]-mB)**2; }
+    const sR=Math.sqrt(vR/n), sG=Math.sqrt(vG/n), sB=Math.sqrt(vB/n);
+    const lum = 0.299*mR + 0.587*mG + 0.114*mB;
+
+    // Derive plausible skin metrics from image statistics
+    const redness = Math.min(100, Math.max(5, (mR/Math.max(1,mG))*28 + sR*0.4 - 10));
+    const hydration = Math.min(100, Math.max(10, 110 - (mR-mB)*0.25 - sR*0.15 + (lum/255)*20));
+    const pigmentation = Math.min(100, Math.max(5, sR*0.7 + sG*0.25 + Math.abs(mR-mG)*0.15));
+    const texture = Math.min(100, Math.max(5, sR*0.5 + sG*0.4 + sB*0.3));
+    const pores = Math.min(100, Math.max(5, texture*0.6 + (sR/sG)*15));
+    const wrinkles = Math.min(100, Math.max(5, texture*0.5 + sR*0.2 + (lum<120?15:0)));
+    const aging = Math.min(100, Math.max(5, wrinkles*0.5 + pigmentation*0.2 + (100-hydration)*0.3));
+    const sensitivity = Math.min(100, Math.max(5, redness*0.5 + (100-hydration)*0.2 + texture*0.2));
+    const overall = Math.min(100, Math.max(5, (100-redness)*0.2 + hydration*0.25 + (100-pigmentation)*0.15 + (100-wrinkles)*0.15 + (100-pores)*0.1 + (100-sensitivity)*0.15));
+
+    return { pigmentation:+pigmentation.toFixed(1), redness:+redness.toFixed(1), wrinkles:+wrinkles.toFixed(1), pores:+pores.toFixed(1), hydration:+hydration.toFixed(1), aging:+aging.toFixed(1), texture:+texture.toFixed(1), sensitivity:+sensitivity.toFixed(1), overall:+overall.toFixed(1) };
+  }
+
+  generateDemoScores(): SkinScores {
+    const r = (min: number, max: number) => +(min + Math.random()*(max-min)).toFixed(1);
+    return { pigmentation:r(25,70), redness:r(20,65), wrinkles:r(15,60), pores:r(20,55), hydration:r(35,80), aging:r(20,65), texture:r(25,60), sensitivity:r(15,55), overall:r(45,85) };
+  }
+}
+
+// ==================== DOSHA ANALYZER ====================
+
+interface QuizQuestion {
+  text: string;
+  options: { label: string; dosha: DoshaType; subtext: string }[];
+}
+
+const QUIZ_QUESTIONS: QuizQuestion[] = [
+  { text:'How does your skin feel when you wake up in the morning?', options:[
+    { label:'Dry, tight, or slightly flaky', dosha:'vata', subtext:'Vata skin tends toward dryness' },
+    { label:'Warm, slightly oily, or flushed', dosha:'pitta', subtext:'Pitta skin runs warm and sensitive' },
+    { label:'Oily, smooth, and well-moisturized', dosha:'kapha', subtext:'Kapha skin is naturally lubricated' },
+  ]},
+  { text:'How does your skin typically react to stress or seasonal change?', options:[
+    { label:'Becomes dry, rough, or shows fine lines', dosha:'vata', subtext:'Vata imbalance manifests as dryness' },
+    { label:'Becomes red, inflamed, or breaks out', dosha:'pitta', subtext:'Pitta imbalance brings heat and inflammation' },
+    { label:'Becomes more oily, congested, or dull', dosha:'kapha', subtext:'Kapha imbalance causes excess oil and stagnation' },
+  ]},
+  { text:'Which best describes your natural skin texture?', options:[
+    { label:'Thin, fine-pored, cool to the touch', dosha:'vata', subtext:'Vata skin is delicate and thin' },
+    { label:'Medium thickness, warm, sensitive, prone to redness', dosha:'pitta', subtext:'Pitta skin is moderate and heat-sensitive' },
+    { label:'Thick, smooth, cool, larger pores', dosha:'kapha', subtext:'Kapha skin is dense and well-padded' },
+  ]},
+  { text:'In which season does your skin look and feel its worst?', options:[
+    { label:'Autumn and winter (cold, dry, windy)', dosha:'vata', subtext:'Cold and wind aggravate Vata' },
+    { label:'Summer (hot, sunny, humid)', dosha:'pitta', subtext:'Heat and sun aggravate Pitta' },
+    { label:'Spring (wet, humid, transitional)', dosha:'kapha', subtext:'Moisture and heaviness aggravate Kapha' },
+  ]},
+  { text:'What is your primary, most persistent skin concern?', options:[
+    { label:'Dryness, premature fine lines, dullness', dosha:'vata', subtext:'Vata-driven aging and dehydration' },
+    { label:'Redness, sensitivity, sun damage, rosacea', dosha:'pitta', subtext:'Pitta-driven inflammation and reactivity' },
+    { label:'Oiliness, enlarged pores, congestion, cystic acne', dosha:'kapha', subtext:'Kapha-driven excess and blockage' },
+  ]},
+];
+
+class DoshaAnalyzer {
+  private scores: Record<DoshaType, number> = { vata:0, pitta:0, kapha:0, tridoshic:0 };
+  private answers: DoshaType[] = [];
+
+  recordAnswer(dosha: DoshaType): void { this.answers.push(dosha); this.scores[dosha] += 1; }
+
+  getProfile(): DoshaProfile {
+    const sorted = (['vata','pitta','kapha'] as DoshaType[]).sort((a,b) => this.scores[b]-this.scores[a]);
+    const primary = this.scores[sorted[0]] === this.scores[sorted[1]] ? 'tridoshic' as DoshaType : sorted[0];
+    const secondary = primary === 'tridoshic' ? 'tridoshic' : sorted[1];
+
+    const qualities: Record<string, string[]> = {
+      vata: ['Dry and thin skin','Cool to touch','Fine pores','Prone to premature aging','Easily dehydrated','Rough texture when imbalanced'],
+      pitta: ['Warm and sensitive skin','Medium thickness','Prone to redness and rosacea','Fair to medium tone','Reacts to heat and sun','Inflammation-prone'],
+      kapha: ['Thick and smooth skin','Oily and well-hydrated','Larger visible pores','Dull when imbalanced','Prone to congestion and cystic acne','Slow to show aging'],
+      tridoshic: ['Balanced skin qualities','Adapts to most conditions','May show mixed concerns','Generally resilient','Requires seasonal adjustment','Rarely extreme in any metric'],
+    };
+
+    const imbalances: Record<string, string[]> = {
+      vata: ['Dehydration lines','Flakiness and scaling','Loss of firmness','Dull, lackluster complexion','Cracked or rough patches'],
+      pitta: ['Inflammatory breakouts','UV-triggered pigmentation','Rosacea flares','Heat rashes','Broken capillaries'],
+      kapha: ['Excessive sebum','Blackheads and whiteheads','Cystic acne','Water retention and puffiness','Sluggish cell turnover'],
+      tridoshic: ['Seasonal sensitivity','Mild combination concerns','Occasional imbalance shifts','Needs adaptive care'],
+    };
+
+    return {
+      primary, secondary,
+      scores: { vata:this.scores.vata, pitta:this.scores.pitta, kapha:this.scores.kapha },
+      skinQualities: qualities[primary] || qualities.tridoshic,
+      imbalances: imbalances[primary] || imbalances.tridoshic,
+    };
+  }
+
+  reset(): void { this.scores = {vata:0,pitta:0,kapha:0,tridoshic:0}; this.answers = []; }
+}
+
+// ==================== CLIMATE INTELLIGENCE ====================
+
+class ClimateIntelligence {
+  async detectClimate(): Promise<ClimateData> {
+    // Try geolocation
+    try {
+      const pos: GeolocationPosition = await new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout:8000 })
+      );
+      const { latitude, longitude } = pos.coords;
+      // Use free Open-Meteo API (no key needed)
+      const resp = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,uv_index&timezone=auto`);
+      const data = await resp.json();
+      const current = data.current;
+      const month = new Date().getMonth();
+      const season = (month>=2&&month<=4)?'spring':(month>=5&&month<=7)?'summer':(month>=8&&month<=10)?'autumn':'winter';
+
+      // Reverse geocode for location name (free Nominatim)
+      let location = `${latitude.toFixed(1)}, ${longitude.toFixed(1)}`;
+      try {
+        const geoResp = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+        const geoData = await geoResp.json();
+        location = geoData.address?.city || geoData.address?.town || geoData.address?.county || location;
+      } catch(e) { /* keep coords */ }
+
+      return {
+        temperature: current.temperature_2m,
+        humidity: current.relative_humidity_2m,
+        uvIndex: Math.round(current.uv_index || 5),
+        season: season as Season,
+        pollution: 'moderate',
+        location,
+      };
+    } catch(e) {
+      // Fallback: seasonal defaults
+      const month = new Date().getMonth();
+      const season = (month>=2&&month<=4)?'spring':(month>=5&&month<=7)?'summer':(month>=8&&month<=10)?'autumn':'winter';
+      const defaults: Record<string, Partial<ClimateData>> = {
+        spring: { temperature:18, humidity:55, uvIndex:5 },
+        summer: { temperature:30, humidity:65, uvIndex:8 },
+        autumn: { temperature:14, humidity:50, uvIndex:3 },
+        winter: { temperature:4, humidity:40, uvIndex:2 },
+      };
+      const d = defaults[season] || defaults.spring;
+      return { temperature:d.temperature!, humidity:d.humidity!, uvIndex:d.uvIndex!, season:season as Season, pollution:'moderate', location:'Seasonal Estimate' };
+    }
+  }
+}
+
+// ==================== INGREDIENT ANALYZER ====================
+
+class IngredientAnalyzer {
+  analyzeSafety(ingredients: Ingredient[], sensitivity: number): number {
+    if (ingredients.length === 0) return 0;
+    const total = ingredients.reduce((sum, ing) => {
+      let score = ing.safetyScore / 10;
+      // Reduce score for high comedogenic ingredients if user has pore concerns
+      if (ing.comedogenic >= 3) score *= 0.8;
+      // Reduce score for irritating ingredients if user has high sensitivity
+      if (ing.safetyScore <= 6 && sensitivity > 60) score *= 0.6;
+      return sum + score;
+    }, 0);
+    return +(total / ingredients.length * 100).toFixed(1);
+  }
+
+  getSafetyBadge(score: number): { label:string; cls:string } {
+    if (score >= 80) return { label:'Safe', cls:'ingr-safe' };
+    if (score >= 60) return { label:'Caution', cls:'ingr-caution' };
+    return { label:'Review', cls:'ingr-avoid' };
+  }
+}
+
+// ==================== RECOMMENDATION ENGINE (CORE) ====================
+
+class RecommendationEngine {
+  private ingredientAnalyzer = new IngredientAnalyzer();
+
+  generateRecommendations(
+    skinScores: SkinScores,
+    dosha: DoshaProfile,
+    climate: ClimateData,
+    filterCategory?: string
+  ): Recommendation[] {
+    let candidates = [...PRODUCTS];
+    if (filterCategory && filterCategory !== 'all') {
+      candidates = candidates.filter(p => p.category === filterCategory);
+    }
+
+    const recommendations: Recommendation[] = candidates.map(product => {
+      const concernMatch = this.scoreConcernMatch(product, skinScores);
+      const doshaMatch = this.scoreDoshaMatch(product, dosha);
+      const climateMatch = this.scoreClimateMatch(product, climate);
+      const ingredientSafety = this.ingredientAnalyzer.analyzeSafety(product.ingredients, skinScores.sensitivity);
+      const baseRating = product.rating / 5;
+
+      // Weighted multi-signal fusion
+      const matchScore = +(
+        concernMatch * 0.40 +
+        doshaMatch * 0.20 +
+        climateMatch * 0.15 +
+        ingredientSafety * 0.15 +
+        baseRating * 0.10
+      ).toFixed(1);
+
+      const reasoning = this.generateReasoning(product, concernMatch, doshaMatch, climateMatch, ingredientSafety, skinScores, dosha, climate);
+
+      return { product, matchScore: Math.min(99, Math.max(5, matchScore)), reasoning, concernMatch:+concernMatch.toFixed(1), doshaMatch:+doshaMatch.toFixed(1), climateMatch:+climateMatch.toFixed(1), ingredientSafety };
+    });
+
+    return recommendations.sort((a,b) => b.matchScore - a.matchScore);
+  }
+
+  private scoreConcernMatch(product: Product, scores: SkinScores): number {
+    const concernMap: Record<string, keyof SkinScores> = {
+      'pigmentation':'pigmentation', 'redness':'redness', 'wrinkles':'wrinkles',
+      'pores':'pores', 'hydration':'hydration', 'aging':'aging',
+      'texture':'texture', 'sensitivity':'sensitivity'
+    };
+    let weightedSum = 0;
+    let totalWeight = 0;
+
+    for (const concern of product.targetConcerns) {
+      const key = concernMap[concern];
+      if (key && key !== 'overall') {
+        // Higher concern severity = higher need = higher match value
+        const severity = scores[key];
+        // For hydration, high score is good, so invert
+        const need = key === 'hydration' ? (100 - severity) : severity;
+        weightedSum += need;
+        totalWeight += 100;
+      }
+    }
+
+    return totalWeight > 0 ? (weightedSum / totalWeight) * 100 : 50;
+  }
+
+  private scoreDoshaMatch(product: Product, dosha: DoshaProfile): number {
+    if (dosha.primary === 'tridoshic') return 90; // Tridoshic matches most things well
+    if (product.doshaCompatibility.includes(dosha.primary)) return 95;
+    if (product.doshaCompatibility.includes(dosha.secondary)) return 70;
+    // Check if any ingredient matches
+    const hasMatchingIngr = product.ingredients.some(i => i.doshaAffinity.includes(dosha.primary));
+    if (hasMatchingIngr) return 55;
+    return 35;
+  }
+
+  private scoreClimateMatch(product: Product, climate: ClimateData): number {
+    if (product.climateSuitability.includes(climate.season)) return 95;
+    // Adjacent seasons get partial credit
+    const seasonOrder: Season[] = ['spring','summer','autumn','winter'];
+    const idx = seasonOrder.indexOf(climate.season);
+    const adjacent = [seasonOrder[(idx-1+4)%4], seasonOrder[(idx+1)%4]];
+    if (product.climateSuitability.some(s => adjacent.includes(s))) return 60;
+
+    // Check UV sensitivity
+    if (climate.uvIndex > 6 && product.targetConcerns.includes('pigmentation')) return 70;
+    // Check humidity
+    if (climate.humidity < 30 && product.targetConcerns.includes('hydration')) return 75;
+    if (climate.humidity > 70 && product.targetConcerns.includes('pores')) return 70;
+
+    return 40;
+  }
+
+  private generateReasoning(
+    product: Product, concernMatch: number, doshaMatch: number,
+    climateMatch: number, ingredientSafety: number,
+    scores: SkinScores, dosha: DoshaProfile, climate: ClimateData
+  ): string[] {
+    const reasons: string[] = [];
+
+    // Concern-based reasons
+    const concernLabels: Record<string,string> = {
+      pigmentation:'Pigmentation', redness:'Redness', wrinkles:'Wrinkles',
+      pores:'Pores', hydration:'Hydration', aging:'Aging',
+      texture:'Texture', sensitivity:'Sensitivity'
+    };
+    const topConcerns = product.targetConcerns
+      .filter(c => c !== 'hydration' ? scores[c as keyof SkinScores] > 40 : scores.hydration < 60)
+      .map(c => concernLabels[c] || c);
+    if (topConcerns.length > 0) {
+      reasons.push(`Targets your elevated ${topConcerns.join(', ')} concerns`);
+    }
+
+    // Dosha reason
+    if (doshaMatch >= 70) {
+      reasons.push(`Formulation aligns with your ${dosha.primary.charAt(0).toUpperCase()+dosha.primary.slice(1)} dosha constitution`);
+    }
+
+    // Climate reason
+    if (climateMatch >= 70) {
+      reasons.push(`Optimized for ${climate.season} conditions (${climate.humidity}% humidity, UV ${climate.uvIndex})`);
+    }
+
+    // Ingredient reason
+    if (ingredientSafety >= 85) {
+      reasons.push('All ingredients score high on safety for your sensitivity level');
+    } else if (ingredientSafety < 65) {
+      reasons.push('Contains some active ingredients — patch test recommended');
+    }
+
+    // Ayurvedic reason
+    if (product.ayurvedicNotes) {
+      const shortNote = product.ayurvedicNotes.split('.')[0];
+      reasons.push(shortNote + '.');
+    }
+
+    return reasons.slice(0, 4);
+  }
+}
+
+// ==================== RADAR CHART RENDERER ====================
+
+class RadarChartRenderer {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+
+  constructor(canvasId: string) {
+    this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+    this.ctx = this.canvas.getContext('2d')!;
+  }
+
+  draw(scores: SkinScores, animated: boolean = true): void {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const cx = w/2, cy = h/2;
+    const maxR = Math.min(cx, cy) - 40;
+    const labels: {key:keyof SkinScores; label:string}[] = [
+      {key:'pigmentation',label:'Pigmentation'}, {key:'redness',label:'Redness'},
+      {key:'wrinkles',label:'Wrinkles'}, {key:'pores',label:'Pores'},
+      {key:'hydration',label:'Hydration'}, {key:'aging',label:'Aging'},
+      {key:'texture',label:'Texture'}, {key:'sensitivity',label:'Sensitivity'},
+    ];
+    const n = labels.length;
+    const angleStep = (Math.PI * 2) / n;
+    const startAngle = -Math.PI / 2;
+
+    const drawFrame = (progress: number) => {
+      ctx.clearRect(0, 0, w, h);
+
+      // Grid rings
+      for (let ring = 1; ring <= 4; ring++) {
+        const r = (maxR / 4) * ring;
+        ctx.beginPath();
+        for (let i = 0; i <= n; i++) {
+          const angle = startAngle + angleStep * i;
+          const x = cx + Math.cos(angle) * r;
+          const y = cy + Math.sin(angle) * r;
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = ring === 4 ? 'rgba(45,212,168,0.2)' : 'rgba(45,212,168,0.08)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Axis lines and labels
+      ctx.font = '11px "DM Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i < n; i++) {
+        const angle = startAngle + angleStep * i;
+        const x = cx + Math.cos(angle) * maxR;
+        const y = cy + Math.sin(angle) * maxR;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y);
+        ctx.strokeStyle = 'rgba(45,212,168,0.1)'; ctx.stroke();
+
+        const lx = cx + Math.cos(angle) * (maxR + 22);
+        const ly = cy + Math.sin(angle) * (maxR + 22);
+        const val = scores[labels[i].key];
+        ctx.fillStyle = val > 60 ? '#ef6461' : val > 35 ? '#c9a84c' : '#2dd4a8';
+        ctx.fillText(labels[i].label, lx, ly);
+      }
+
+      // Data polygon
+      ctx.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const idx = i % n;
+        const angle = startAngle + angleStep * idx;
+        const val = scores[labels[idx].key] / 100;
+        const r = Math.max(0.02, val * maxR * progress);
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+
+      // Fill gradient
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
+      grad.addColorStop(0, 'rgba(201,168,76,0.25)');
+      grad.addColorStop(1, 'rgba(45,212,168,0.08)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(201,168,76,0.8)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Data points
+      for (let i = 0; i < n; i++) {
+        const angle = startAngle + angleStep * i;
+        const val = scores[labels[i].key] / 100;
+        const r = Math.max(0.02, val * maxR * progress);
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI*2);
+        ctx.fillStyle = '#c9a84c'; ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2);
+        ctx.fillStyle = '#070f0b'; ctx.fill();
+      }
+    };
+
+    if (animated) {
+      let start: number | null = null;
+      const duration = 1200;
+      const animate = (ts: number) => {
+        if (!start) start = ts;
+        const progress = Math.min(1, (ts - start) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+        drawFrame(eased);
+        if (progress < 1) requestAnimationFrame(animate);
+      };
+      requestAnimationFrame(animate);
+    } else {
+      drawFrame(1);
+    }
+  }
+}
+
+// ==================== UI CONTROLLER ====================
+
+class UIController {
+  private currentStep = 1;
+  private skinScores: SkinScores | null = null;
+  private doshaProfile: DoshaProfile | null = null;
+  private climateData: ClimateData | null = null;
+  private capturedImageData: ImageData | null = null;
+
+  private skinEngine = new SkinAnalysisEngine();
+  private doshaAnalyzer = new DoshaAnalyzer();
+  private climateIntel = new ClimateIntelligence();
+  private recEngine = new RecommendationEngine();
+  private radarRenderer: RadarChartRenderer | null = null;
+  private quizStep = 0;
+
+  init(): void {
+    this.bindCamera();
+    this.bindFileUpload();
+    this.bindSkip();
+    this.bindQuizNav();
+    this.buildQuiz();
+    this.loadClimate();
+    this.bindFilters();
+    this.bindRestart();
+  }
+
+  // ---- Navigation ----
+  private goToStep(step: number): void {
+    const prev = document.getElementById(`step-${this.currentStep}`);
+    if (prev) { prev.classList.remove('active'); }
+    this.currentStep = step;
+    const next = document.getElementById(`step-${step}`);
+    if (next) {
+      // Small delay for transition
+      setTimeout(() => { next.classList.add('active'); }, 50);
+    }
+    this.updateStepDots();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  private updateStepDots(): void {
+    document.querySelectorAll('.step-dot').forEach(dot => {
+      const s = parseInt(dot.getAttribute('data-step') || '1');
+      dot.classList.remove('active','completed');
+      if (s === this.currentStep) dot.classList.add('active');
+      else if (s < this.currentStep) dot.classList.add('completed');
+    });
+  }
+
+  // ---- Camera ----
+  private async bindCamera(): Promise<void> {
+    const video = document.getElementById('cam-video') as HTMLVideoElement;
+    const btn = document.getElementById('btn-capture') as HTMLButtonElement;
+    const status = document.getElementById('cam-status') as HTMLParagraphElement;
+    const placeholder = document.getElementById('cam-placeholder') as HTMLDivElement;
+    const guide = document.getElementById('cam-guide') as HTMLDivElement;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480} } });
+      video.srcObject = stream;
+      video.onloadedmetadata = () => { placeholder.classList.add('hidden'); guide.style.display=''; };
+      btn.disabled = false;
+      status.textContent = 'Camera ready — position your face in the oval guide';
+    } catch(e) {
+      placeholder.innerHTML = '<i class="fa-solid fa-video-slash text-4xl text-aurora-700 mb-4 block"></i><span class="text-sm">Camera unavailable — use Upload or Skip</span>';
+      guide.style.display = 'none';
+      status.textContent = 'Camera access denied or unavailable';
+    }
+
+    btn.addEventListener('click', () => this.captureImage());
+  }
+
+  private captureImage(): void {
+    const video = document.getElementById('cam-video') as HTMLVideoElement;
+    const canvas = document.getElementById('cam-canvas') as HTMLCanvasElement;
+    const preview = document.getElementById('cam-preview') as HTMLImageElement;
+    const guide = document.getElementById('cam-guide') as HTMLDivElement;
+    const btn = document.getElementById('btn-capture') as HTMLButtonElement;
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    this.capturedImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    preview.src = canvas.toDataURL('image/jpeg', 0.85);
+    preview.classList.remove('hidden');
+    video.classList.add('hidden');
+    guide.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Captured';
+    btn.classList.remove('pulse-ring');
+
+    // Stop camera stream
+    if (video.srcObject) { (video.srcObject as MediaStream).getTracks().forEach(t => t.stop()); }
+
+    this.skinScores = this.skinEngine.analyzeFromImageData(this.capturedImageData);
+    this.showToast('Skin analysis captured — proceeding to Dosha Quiz');
+    setTimeout(() => this.goToStep(2), 800);
+  }
+
+  // ---- File Upload ----
+  private bindFileUpload(): void {
+    const input = document.getElementById('file-upload') as HTMLInputElement;
+    input.addEventListener('change', (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.getElementById('cam-canvas') as HTMLCanvasElement;
+          const preview = document.getElementById('cam-preview') as HTMLImageElement;
+          const video = document.getElementById('cam-video') as HTMLVideoElement;
+          const guide = document.getElementById('cam-guide') as HTMLDivElement;
+          const btn = document.getElementById('btn-capture') as HTMLButtonElement;
+
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0);
+          this.capturedImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+          preview.src = ev.target?.result as string;
+          preview.classList.remove('hidden');
+          video.classList.add('hidden');
+          guide.style.display = 'none';
+          btn.disabled = true;
+          btn.textContent = 'Uploaded';
+          btn.classList.remove('pulse-ring');
+          if (video.srcObject) { (video.srcObject as MediaStream).getTracks().forEach(t => t.stop()); }
+
+          this.skinScores = this.skinEngine.analyzeFromImageData(this.capturedImageData);
+          this.showToast('Image uploaded — proceeding to Dosha Quiz');
+          setTimeout(() => this.goToStep(2), 800);
+        };
+        img.src = ev.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ---- Skip ----
+  private bindSkip(): void {
+    document.getElementById('btn-skip')?.addEventListener('click', () => {
+      this.skinScores = this.skinEngine.generateDemoScores();
+      this.showToast('Using demo skin profile — proceeding to Dosha Quiz');
+      setTimeout(() => this.goToStep(2), 600);
+    });
+  }
+
+  // ---- Quiz ----
+  private buildQuiz(): void {
+    this.renderQuizStep();
+  }
+
+  private renderQuizStep(): void {
+    const container = document.getElementById('quiz-container') as HTMLDivElement;
+    const progress = document.getElementById('quiz-progress') as HTMLDivElement;
+    const q = QUIZ_QUESTIONS[this.quizStep];
+
+    // Update progress bar
+    const bars = progress.children;
+    for (let i = 0; i < bars.length; i++) {
+      (bars[i] as HTMLDivElement).style.width = i <= this.quizStep ? '100%' : '0%';
+      (bars[i] as HTMLDivElement).className = `h-1 flex-1 rounded transition-all duration-300 ${i <= this.quizStep ? 'bg-gold-500' : 'bg-aurora-800'}`;
+    }
+
+    container.innerHTML = `
+      <p class="text-xs text-gold-500 font-semibold mb-2 uppercase tracking-wider">Question ${this.quizStep+1} of ${QUIZ_QUESTIONS.length}</p>
+      <h3 class="text-xl font-display font-semibold mb-6 leading-snug">${q.text}</h3>
+      <div class="space-y-3">
+        ${q.options.map((opt, i) => `
+          <div class="quiz-opt" data-dosha="${opt.dosha}" tabindex="0" role="button" aria-label="${opt.label}">
+            <div class="flex items-start gap-3">
+              <div class="w-5 h-5 mt-0.5 rounded-full border-2 border-aurora-700 flex-shrink-0 flex items-center justify-center transition-colors opt-circle"></div>
+              <div>
+                <div class="font-medium text-sm">${opt.label}</div>
+                <div class="text-xs text-moss mt-1">${opt.subtext}</div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    container.querySelectorAll('.quiz-opt').forEach(el => {
+      const handler = () => {
+        container.querySelectorAll('.quiz-opt').forEach(o => { o.classList.remove('selected'); o.querySelector('.opt-circle')?.classList.remove('border-gold-500','bg-gold-500'); });
+        el.classList.add('selected');
+        el.querySelector('.opt-circle')?.classList.add('border-gold-500','bg-gold-500');
+        const dosha = el.getAttribute('data-dosha') as DoshaType;
+        this.doshaAnalyzer.recordAnswer(dosha);
+        setTimeout(() => {
+          this.quizStep++;
+          if (this.quizStep < QUIZ_QUESTIONS.length) {
+            this.renderQuizStep();
+          } else {
+            this.doshaProfile = this.doshaAnalyzer.getProfile();
+            this.showToast(`Dosha identified: ${this.doshaProfile.primary.toUpperCase()}`);
+            setTimeout(() => this.goToStep(3), 600);
+          }
+        }, 500);
+      };
+      el.addEventListener('click', handler);
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } });
+    });
+  }
+
+  private bindQuizNav(): void {} // Navigation handled within quiz flow
+
+  // ---- Climate ----
+  private async loadClimate(): void {
+    const loading = document.getElementById('climate-loading') as HTMLDivElement;
+    const dataDiv = document.getElementById('climate-data') as HTMLDivElement;
+
+    try {
+      this.climateData = await this.climateIntel.detectClimate();
+    } catch(e) {
+      const month = new Date().getMonth();
+      const season = (month>=2&&month<=4)?'spring':(month>=5&&month<=7)?'summer':(month>=8&&month<=10)?'autumn':'winter';
+      this.climateData = { temperature:20, humidity:50, uvIndex:5, season:season as Season, pollution:'moderate', location:'Estimated' };
+    }
+
+    loading.classList.add('hidden');
+    dataDiv.classList.remove('hidden');
+    this.renderClimateData();
+
+    document.getElementById('btn-climate-next')?.addEventListener('click', () => {
+      // Apply slider overrides
+      const humSlider = document.getElementById('cl-hum-slider') as HTMLInputElement;
+      const uvSlider = document.getElementById('cl-uv-slider') as HTMLInputElement;
+      if (this.climateData) {
+        this.climateData.humidity = parseInt(humSlider.value);
+        this.climateData.uvIndex = parseInt(uvSlider.value);
+      }
+      this.goToStep(4);
+      this.runProcessing();
+    });
+
+    // Update display on slider change
+    (document.getElementById('cl-hum-slider') as HTMLInputElement)?.addEventListener('input', (e) => {
+      document.getElementById('cl-humidity')!.textContent = `${(e.target as HTMLInputElement).value}%`;
+    });
+    (document.getElementById('cl-uv-slider') as HTMLInputElement)?.addEventListener('input', (e) => {
+      document.getElementById('cl-uv')!.textContent = (e.target as HTMLInputElement).value;
+    });
+  }
+
+  private renderClimateData(): void {
+    if (!this.climateData) return;
+    const c = this.climateData;
+    document.getElementById('cl-temp')!.textContent = `${Math.round(c.temperature)}°C`;
+    document.getElementById('cl-humidity')!.textContent = `${c.humidity}%`;
+    document.getElementById('cl-uv')!.textContent = `${c.uvIndex}`;
+    document.getElementById('cl-season')!.textContent = c.season.charAt(0).toUpperCase() + c.season.slice(1);
+    document.getElementById('cl-location')!.innerHTML = `<i class="fa-solid fa-map-pin mr-1"></i> ${c.location}`;
+    (document.getElementById('cl-hum-slider') as HTMLInputElement).value = c.humidity.toString();
+    (document.getElementById('cl-uv-slider') as HTMLInputElement).value = c.uvIndex.toString();
+  }
+
+  // ---- Processing ----
+  private async runProcessing(): Promise<void> {
+    const container = document.getElementById('proc-steps') as HTMLDivElement;
+    const bar = document.getElementById('proc-bar') as HTMLDivElement;
+    const pct = document.getElementById('proc-pct') as HTMLParagraphElement;
+
+    const steps = [
+      { icon:'fa-solid fa-magnifying-glass', text:'Detecting skin regions and boundaries' },
+      { icon:'fa-solid fa-palette', text:'Analyzing pigmentation and tone evenness' },
+      { icon:'fa-solid fa-droplet', text:'Measuring hydration and moisture barriers' },
+      { icon:'fa-solid fa-fingerprint', text:'Evaluating texture, pores, and fine lines' },
+      { icon:'fa-solid fa-om', text:'Calculating Ayurvedic dosha balance' },
+      { icon:'fa-solid fa-cloud-sun', text:'Cross-referencing climate adaptation data' },
+      { icon:'fa-solid fa-flask', text:'Scanning ingredient database for compatibility' },
+      { icon:'fa-solid fa-wand-magic-sparkles', text:'Generating personalized recommendations' },
+    ];
+
+    container.innerHTML = steps.map((s, i) => `
+      <div class="proc-step flex items-center gap-3 p-3 rounded-xl bg-aurora-950/50" data-idx="${i}">
+        <i class="${s.icon} proc-icon text-moss text-lg w-6 text-center"></i>
+        <span class="text-sm">${s.text}</span>
+        <i class="fa-solid fa-check ml-auto text-transparent proc-check"></i>
+      </div>
+    `).join('');
+
+    for (let i = 0; i < steps.length; i++) {
+      const el = container.children[i] as HTMLDivElement;
+      el.classList.add('active');
+      const progress = ((i + 1) / steps.length) * 100;
+      bar.style.width = `${progress}%`;
+      pct.textContent = `${Math.round(progress)}%`;
+      await this.delay(600 + Math.random() * 400);
+      el.classList.remove('active');
+      el.classList.add('done');
+      el.querySelector('.proc-check')!.classList.remove('text-transparent');
+      el.querySelector('.proc-check')!.classList.add('text-aurora-400');
+    }
+
+    await this.delay(500);
+    this.goToStep(5);
+    this.renderResults();
+  }
+
+  // ---- Results ----
+  private renderResults(): void {
+    if (!this.skinScores || !this.doshaProfile || !this.climateData) return;
+
+    // Radar chart
+    this.radarRenderer = new RadarChartRenderer('radar-canvas');
+    setTimeout(() => this.radarRenderer!.draw(this.skinScores!, true), 300);
+
+    // Dosha card
+    this.renderDoshaCard();
+
+    // Climate card
+    this.renderClimateCard();
+
+    // Score bars
+    this.renderScoreBars();
+
+    // Recommendations
+    this.renderRecommendations('all');
+  }
+
+  private renderDoshaCard(): void {
+    if (!this.doshaProfile) return;
+    const d = this.doshaProfile;
+    const maxScore = Math.max(d.scores.vata, d.scores.pitta, d.scores.kapha, 1);
+    const colors: Record<string,string> = { vata:'#2dd4a8', pitta:'#ef6461', kapha:'#c9a84c' };
+
+    document.getElementById('dosha-result')!.innerHTML = `
+      <div class="text-center mb-4">
+        <div class="text-3xl font-display font-bold" style="color:${colors[d.primary] || '#c9a84c'}">${d.primary.toUpperCase()}</div>
+        ${d.secondary !== 'tridoshic' ? `<div class="text-xs text-moss mt-1">Secondary: ${d.secondary}</div>` : ''}
+      </div>
+      <div class="space-y-2 mb-4">
+        ${(['vata','pitta','kapha'] as const).map(dosha => `
+          <div class="flex items-center gap-2">
+            <span class="text-xs w-12 capitalize" style="color:${colors[dosha]}">${dosha}</span>
+            <div class="flex-1 h-2 bg-aurora-950 rounded-full overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-1000" style="width:${(d.scores[dosha]/maxScore)*100}%;background:${colors[dosha]}"></div>
+            </div>
+            <span class="text-xs text-moss w-4 text-right">${d.scores[dosha]}</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="text-xs text-moss space-y-1">
+        <div class="font-semibold text-cream mb-1">Skin Qualities:</div>
+        ${d.skinQualities.slice(0,3).map(q => `<div class="flex gap-1"><span class="text-aurora-400">&#8226;</span>${q}</div>`).join('')}
+      </div>
+    `;
+  }
+
+  private renderClimateCard(): void {
+    if (!this.climateData) return;
+    const c = this.climateData;
+    const tips: string[] = [];
+    if (c.humidity < 35) tips.push('Low humidity detected — prioritize humectants and occlusives');
+    if (c.humidity > 70) tips.push('High humidity — lighter textures recommended to prevent congestion');
+    if (c.uvIndex >= 6) tips.push('High UV index — daily SPF 50+ is essential');
+    if (c.temperature > 28) tips.push('Elevated temperature — cooling and anti-inflammatory ingredients beneficial');
+    if (c.temperature < 8) tips.push('Cold conditions — barrier-repair and rich emollients needed');
+
+    document.getElementById('climate-result')!.innerHTML = `
+      <div class="space-y-2 mb-4">
+        <div class="flex justify-between text-sm"><span class="text-moss">Temperature</span><span>${Math.round(c.temperature)}°C</span></div>
+        <div class="flex justify-between text-sm"><span class="text-moss">Humidity</span><span>${c.humidity}%</span></div>
+        <div class="flex justify-between text-sm"><span class="text-moss">UV Index</span><span class="${c.uvIndex>=6?'text-red-400':''}">${c.uvIndex} ${c.uvIndex>=6?'(High)':''}</span></div>
+        <div class="flex justify-between text-sm"><span class="text-moss">Season</span><span class="capitalize">${c.season}</span></div>
+      </div>
+      <div class="text-xs text-moss space-y-1.5">
+        <div class="font-semibold text-cream mb-1">Adaptation Notes:</div>
+        ${tips.map(t => `<div class="flex gap-1"><span class="text-gold-500">&#8226;</span>${t}</div>`).join('')}
+        ${tips.length === 0 ? '<div class="flex gap-1"><span class="text-aurora-400">&#8226;</span>Moderate conditions — maintain balanced routine</div>' : ''}
+      </div>
+    `;
+  }
+
+  private renderScoreBars(): void {
+    if (!this.skinScores) return;
+    const container = document.getElementById('score-bars') as HTMLDivElement;
+    const metrics: {key:keyof SkinScores; label:string; invert?:boolean}[] = [
+      {key:'pigmentation',label:'Pigmentation'}, {key:'redness',label:'Redness'},
+      {key:'wrinkles',label:'Wrinkles'}, {key:'pores',label:'Pore Visibility'},
+      {key:'hydration',label:'Hydration',invert:true}, {key:'aging',label:'Aging Signs'},
+      {key:'texture',label:'Texture Irregularity'}, {key:'sensitivity',label:'Sensitivity'},
+    ];
+
+    container.innerHTML = metrics.map(m => {
+      const val = this.skinScores![m.key];
+      const displayVal = m.invert ? val : val;
+      const color = m.invert ? (val > 65 ? '#2dd4a8' : val > 40 ? '#c9a84c' : '#ef6461') : (val > 60 ? '#ef6461' : val > 35 ? '#c9a84c' : '#2dd4a8');
+      return `
+        <div class="flex items-center gap-3">
+          <span class="text-xs w-28 text-moss text-right">${m.label}</span>
+          <div class="flex-1 h-3 bg-aurora-950 rounded-full overflow-hidden">
+            <div class="score-fill" data-width="${displayVal}" style="background:${color}"></div>
+          </div>
+          <span class="text-xs font-semibold w-10 text-right" style="color:${color}">${displayVal.toFixed(0)}${m.invert?'%':'%'}</span>
+        </div>
+      `;
+    }).join('');
+
+    // Animate bars
+    setTimeout(() => {
+      container.querySelectorAll('.score-fill').forEach(bar => {
+        (bar as HTMLDivElement).style.width = `${bar.getAttribute('data-width')}%`;
+      });
+    }, 200);
+  }
+
+  private renderRecommendations(filter: string): void {
+    if (!this.skinScores || !this.doshaProfile || !this.climateData) return;
+    const recs = this.recEngine.generateRecommendations(this.skinScores, this.doshaProfile, this.climateData, filter);
+    const grid = document.getElementById('rec-grid') as HTMLDivElement;
+    const ingrAnalyzer = new IngredientAnalyzer();
+
+    grid.innerHTML = recs.map(rec => {
+      const p = rec.product;
+      const matchColor = rec.matchScore >= 80 ? '#2dd4a8' : rec.matchScore >= 60 ? '#c9a84c' : '#ef6461';
+      const circumference = 2 * Math.PI * 26;
+      const offset = circumference - (rec.matchScore / 100) * circumference;
+
+      return `
+        <article class="product-card glass p-5" data-category="${p.category}">
+          <div class="flex gap-4">
+            <div class="flex-shrink-0">
+              <img src="${p.image}" alt="${p.name}" class="w-20 h-20 rounded-xl object-cover" loading="lazy">
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <h4 class="font-display font-semibold text-base leading-tight">${p.name}</h4>
+                  <p class="text-xs text-moss mt-0.5">${p.subCategory} &middot; ${p.skinTypes.join(', ')}</p>
+                </div>
+                <div class="match-ring flex-shrink-0">
+                  <svg width="64" height="64" viewBox="0 0 64 64">
+                    <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(45,212,168,0.1)" stroke-width="3"/>
+                    <circle cx="32" cy="32" r="26" fill="none" stroke="${matchColor}" stroke-width="3" stroke-linecap="round"
+                      stroke-dasharray="${circumference}" stroke-dashoffset="${circumference}"
+                      class="match-arc" data-target="${offset}"/>
+                  </svg>
+                  <div class="value" style="color:${matchColor}">${rec.matchScore.toFixed(0)}</div>
+                </div>
+              </div>
+              <p class="text-xs text-moss mt-2 line-clamp-2 leading-relaxed">${p.description}</p>
+            </div>
+          </div>
+
+          <!-- Match breakdown -->
+          <div class="grid grid-cols-4 gap-2 mt-4">
+            <div class="text-center p-2 rounded-lg bg-aurora-950/50">
+              <div class="text-xs font-bold" style="color:${rec.concernMatch>=70?'#2dd4a8':rec.concernMatch>=45?'#c9a84c':'#ef6461'}">${rec.concernMatch.toFixed(0)}%</div>
+              <div class="text-[10px] text-moss mt-0.5">Concern</div>
+            </div>
+            <div class="text-center p-2 rounded-lg bg-aurora-950/50">
+              <div class="text-xs font-bold" style="color:${rec.doshaMatch>=70?'#2dd4a8':rec.doshaMatch>=45?'#c9a84c':'#ef6461'}">${rec.doshaMatch.toFixed(0)}%</div>
+              <div class="text-[10px] text-moss mt-0.5">Dosha</div>
+            </div>
+            <div class="text-center p-2 rounded-lg bg-aurora-950/50">
+              <div class="text-xs font-bold" style="color:${rec.climateMatch>=70?'#2dd4a8':rec.climateMatch>=45?'#c9a84c':'#ef6461'}">${rec.climateMatch.toFixed(0)}%</div>
+              <div class="text-[10px] text-moss mt-0.5">Climate</div>
+            </div>
+            <div class="text-center p-2 rounded-lg bg-aurora-950/50">
+              <div class="text-xs font-bold" style="color:${rec.ingredientSafety>=80?'#2dd4a8':rec.ingredientSafety>=60?'#c9a84c':'#ef6461'}">${rec.ingredientSafety.toFixed(0)}%</div>
+              <div class="text-[10px] text-moss mt-0.5">Safety</div>
+            </div>
+          </div>
+
+          <!-- Reasoning -->
+          <div class="mt-4 space-y-1.5">
+            ${rec.reasoning.map(r => `<div class="flex gap-2 text-xs text-moss"><i class="fa-solid fa-check text-aurora-400 mt-0.5 flex-shrink-0 text-[10px]"></i><span>${r}</span></div>`).join('')}
+          </div>
+
+          <!-- Ingredients -->
+          <details class="mt-4 group">
+            <summary class="text-xs text-gold-500 cursor-pointer hover:text-gold-400 transition-colors flex items-center gap-1">
+              <i class="fa-solid fa-flask text-[10px]"></i>
+              View INCI Ingredient Analysis
+              <i class="fa-solid fa-chevron-down text-[8px] ml-auto transition-transform group-open:rotate-180"></i>
+            </summary>
+            <div class="mt-3 space-y-2 pl-4 border-l-2 border-aurora-800">
+              ${p.ingredients.map(ing => {
+                const badge = ingrAnalyzer.getSafetyBadge(ing.safetyScore * 10);
+                const doshaColors: Record<string,string> = { vata:'#2dd4a8', pitta:'#ef6461', kapha:'#c9a84c' };
+                return `
+                  <div class="flex items-start gap-2 text-xs">
+                    <div class="flex-1">
+                      <span class="font-medium text-cream">${ing.inciName}</span>
+                      <span class="text-moss"> (${ing.commonName})</span>
+                      <div class="flex flex-wrap gap-1 mt-1">
+                        ${ing.functions.map(f => `<span class="text-[10px] px-1.5 py-0.5 rounded bg-aurora-950/80 text-moss">${f}</span>`).join('')}
+                      </div>
+                    </div>
+                    <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                      <span class="ingr-badge ${badge.cls}">${badge.label} ${ing.safetyScore}/10</span>
+                      <div class="flex gap-1">
+                        ${ing.doshaAffinity.map(da => `<span class="w-2.5 h-2.5 rounded-full" style="background:${doshaColors[da]||'#888'}" title="${da}"></span>`).join('')}
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </details>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-between mt-4 pt-3 border-t border-aurora-800/50">
+            <div class="flex items-center gap-1">
+              <div class="flex text-gold-500 text-xs">${'&#9733;'.repeat(Math.round(p.rating))}${'&#9734;'.repeat(5-Math.round(p.rating))}</div>
+              <span class="text-xs text-moss ml-1">${p.rating} (${p.reviewCount.toLocaleString()})</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="text-lg font-display font-bold text-cream">$${p.price}</span>
+              <button class="px-4 py-2 rounded-lg bg-gold-500 text-aurora-950 text-xs font-semibold hover:bg-gold-400 transition-colors" onclick="document.dispatchEvent(new CustomEvent('add-to-cart',{detail:'${p.id}'}))">
+                Add to Routine
+              </button>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join('');
+
+    // Animate match rings
+    setTimeout(() => {
+      grid.querySelectorAll('.match-arc').forEach(arc => {
+        const target = arc.getAttribute('data-target');
+        arc.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(0.22,1,0.36,1)';
+        arc.style.strokeDashoffset = target || '0';
+      });
+    }, 400);
+  }
+
+  // ---- Filters ----
+  private bindFilters(): void {
+    document.querySelectorAll('.rec-filter').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.rec-filter').forEach(b => {
+          b.classList.remove('active','border-gold-500','text-gold-500');
+          b.classList.add('border-aurora-800','text-moss');
+        });
+        btn.classList.add('active','border-gold-500','text-gold-500');
+        btn.classList.remove('border-aurora-800','text-moss');
+        const filter = btn.getAttribute('data-filter') || 'all';
+        this.renderRecommendations(filter);
+      });
+    });
+  }
+
+  // ---- Restart ----
+  private bindRestart(): void {
+    document.getElementById('btn-restart')?.addEventListener('click', () => {
+      this.currentStep = 1;
+      this.skinScores = null;
+      this.doshaProfile = null;
+      this.capturedImageData = null;
+      this.quizStep = 0;
+      this.doshaAnalyzer.reset();
+
+      // Reset step sections
+      document.querySelectorAll('.step-section').forEach(s => s.classList.remove('active'));
+      document.getElementById('step-1')?.classList.add('active');
+      this.updateStepDots();
+
+      // Reset camera UI
+      const video = document.getElementById('cam-video') as HTMLVideoElement;
+      const preview = document.getElementById('cam-preview') as HTMLImageElement;
+      const guide = document.getElementById('cam-guide') as HTMLDivElement;
+      const btn = document.getElementById('btn-capture') as HTMLButtonElement;
+      preview.classList.add('hidden');
+      video.classList.remove('hidden');
+      guide.style.display = '';
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-circle mr-2"></i>Capture';
+      btn.classList.add('pulse-ring');
+
+      // Re-init camera
+      this.bindCamera();
+      this.buildQuiz();
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  // ---- Toast ----
+  private showToast(msg: string): void {
+    const toast = document.getElementById('toast') as HTMLDivElement;
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  // ---- Utility ----
+  private delay(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
+}
+
+// ==================== INITIALIZATION ====================
+
+document.addEventListener('DOMContentLoaded', () => {
+  const app = new UIController();
+  app.init();
+
+  // Listen for add-to-cart events
+  document.addEventListener('add-to-cart', ((e: CustomEvent) => {
+    const productId = e.detail;
+    const product = PRODUCTS.find(p => p.id === productId);
+    if (product) {
+      const toast = document.getElementById('toast') as HTMLDivElement;
+      toast.innerHTML = `<i class="fa-solid fa-check-circle text-aurora-400 mr-2"></i>${product.name} added to your routine`;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+  }) as EventListener);
+});
+  </script>
+</body>
+</html>
