@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { RecommendationEngine } from '../src/engine';
 import { REFERENCE_PRODUCTS } from '../src/data/products';
 import { REFERENCE_INGREDIENTS } from '../src/data/ingredients';
