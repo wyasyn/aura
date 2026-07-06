@@ -4,8 +4,8 @@
   "description": "Aurora SkinSense Product Recommendation Engine — multi-signal fusion of skin condition, Ayurvedic dosha, climate, and ingredient safety",
   "private": true,
   "scripts": {
-    "test": "jest --verbose",
-    "test:watch": "jest --watch --verbose"
+    "dev": "next dev",
+    "start": "node index.js"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
