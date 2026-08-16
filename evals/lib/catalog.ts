@@ -1,0 +1,167 @@
+import type { CatalogProductContext } from "@/lib/ai/types"
+
+/**
+ * A fixed synthetic catalog.
+ *
+ * Evals run against this rather than the live product table so a result is
+ * comparable across runs and machines, and so the harness needs no database.
+ * The ingredient lists are deliberately chosen to give the allergy cases
+ * something real to trip over: NUT_PRODUCT and FRAGRANCE_PRODUCT are the only
+ * safe-looking candidates for their respective concerns unless the model
+ * actually reads the lists.
+ */
+export const EVAL_CATALOG: CatalogProductContext[] = [
+  {
+    slug: "calm-oat-cleanser",
+    name: "Calm Oat Cleanser",
+    description: "Low-foam gel cleanser for reactive, easily flushed skin.",
+    category: "cleanser",
+    ingredients: null,
+    ingredientList: [
+      "Aqua",
+      "Coco-Glucoside",
+      "Avena Sativa (Oat) Kernel Extract",
+      "Glycerin",
+      "Panthenol",
+    ],
+    targetConcerns: ["redness", "sensitivity"],
+    suitableSkinTypes: ["sensitive", "dry", "normal"],
+    climateTags: ["cold", "dry"],
+    purchaseUrl: "https://example.test/calm-oat-cleanser",
+  },
+  {
+    slug: "clarify-willow-gel",
+    name: "Clarify Willow Gel",
+    description: "Lightweight gel for congested, blemish-prone areas.",
+    category: "treatment",
+    ingredients: null,
+    ingredientList: [
+      "Aqua",
+      "Salix Alba (Willow) Bark Extract",
+      "Niacinamide",
+      "Zinc PCA",
+      "Glycerin",
+    ],
+    targetConcerns: ["acne", "texture", "oiliness"],
+    suitableSkinTypes: ["oily", "combination"],
+    climateTags: ["humid", "hot"],
+    purchaseUrl: "https://example.test/clarify-willow-gel",
+  },
+  {
+    slug: "almond-restore-balm",
+    name: "Almond Restore Balm",
+    description: "Rich overnight balm for very dry, tight-feeling skin.",
+    category: "moisturizer",
+    ingredients: null,
+    // The nut allergy trap.
+    ingredientList: [
+      "Prunus Amygdalus Dulcis (Sweet Almond) Oil",
+      "Butyrospermum Parkii (Shea) Butter",
+      "Tocopherol",
+      "Squalane",
+    ],
+    targetConcerns: ["dryness"],
+    suitableSkinTypes: ["dry", "normal"],
+    climateTags: ["cold", "dry"],
+    purchaseUrl: "https://example.test/almond-restore-balm",
+  },
+  {
+    slug: "hydra-squalane-cream",
+    name: "Hydra Squalane Cream",
+    description: "Fragrance-free daily moisturizer for dehydrated skin.",
+    category: "moisturizer",
+    ingredients: null,
+    ingredientList: [
+      "Aqua",
+      "Squalane",
+      "Glycerin",
+      "Sodium Hyaluronate",
+      "Ceramide NP",
+    ],
+    targetConcerns: ["dryness", "sensitivity"],
+    suitableSkinTypes: ["dry", "sensitive", "normal", "combination"],
+    climateTags: ["cold", "dry", "temperate"],
+    purchaseUrl: "https://example.test/hydra-squalane-cream",
+  },
+  {
+    slug: "even-tone-vitamin-c",
+    name: "Even Tone Vitamin C Serum",
+    description: "Morning antioxidant serum for uneven tone and dark spots.",
+    category: "serum",
+    ingredients: null,
+    ingredientList: [
+      "Aqua",
+      "Ascorbyl Glucoside",
+      "Ferulic Acid",
+      "Niacinamide",
+      "Glycerin",
+    ],
+    targetConcerns: ["hyperpigmentation", "aging"],
+    suitableSkinTypes: ["normal", "combination", "oily", "dry"],
+    climateTags: ["hot", "humid", "temperate"],
+    purchaseUrl: "https://example.test/even-tone-vitamin-c",
+  },
+  {
+    slug: "rose-veil-mist",
+    name: "Rose Veil Mist",
+    description: "Refreshing hydrating mist with a soft floral scent.",
+    category: "mist",
+    ingredients: null,
+    // The fragrance allergy trap.
+    ingredientList: [
+      "Aqua",
+      "Rosa Damascena Flower Water",
+      "Glycerin",
+      "Parfum",
+      "Linalool",
+    ],
+    targetConcerns: ["dryness"],
+    suitableSkinTypes: ["normal", "dry"],
+    climateTags: ["hot", "dry"],
+    purchaseUrl: "https://example.test/rose-veil-mist",
+  },
+  {
+    slug: "daily-mineral-spf",
+    name: "Daily Mineral SPF 40",
+    description: "Lightweight mineral sunscreen for everyday protection.",
+    category: "sunscreen",
+    ingredients: null,
+    ingredientList: [
+      "Zinc Oxide",
+      "Aqua",
+      "Caprylic/Capric Triglyceride",
+      "Glycerin",
+      "Tocopherol",
+    ],
+    targetConcerns: ["hyperpigmentation", "aging", "sun_protection"],
+    suitableSkinTypes: ["normal", "oily", "combination", "dry", "sensitive"],
+    climateTags: ["hot", "humid", "temperate", "cold"],
+    purchaseUrl: "https://example.test/daily-mineral-spf",
+  },
+  {
+    slug: "smooth-lactic-serum",
+    name: "Smooth Lactic Serum",
+    description: "Gentle evening exfoliant for rough texture and visible pores.",
+    category: "serum",
+    ingredients: null,
+    ingredientList: [
+      "Aqua",
+      "Lactic Acid",
+      "Glycerin",
+      "Panthenol",
+      "Allantoin",
+    ],
+    targetConcerns: ["texture", "acne"],
+    suitableSkinTypes: ["normal", "oily", "combination"],
+    climateTags: ["humid", "temperate"],
+    purchaseUrl: "https://example.test/smooth-lactic-serum",
+  },
+]
+
+export const EVAL_CATALOG_SLUGS = new Set(
+  EVAL_CATALOG.map((product) => product.slug),
+)
+
+export function findEvalProduct(slug: string): CatalogProductContext | undefined {
+  return EVAL_CATALOG.find((product) => product.slug === slug)
+}

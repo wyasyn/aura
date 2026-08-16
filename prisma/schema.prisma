@@ -1,0 +1,693 @@
+// Aura — better-auth + domain models
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── better-auth core ───────────────────────────────────────────────────────
+
+model User {
+  id                  String    @id
+  name                String
+  email               String
+  emailVerified       Boolean   @default(false)
+  image               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  role                String?   @default("user")
+  banned              Boolean?  @default(false)
+  banReason           String?
+  banExpires          DateTime?
+  onboardingCompleted Boolean?  @default(false)
+  scanTier            ScanTier  @default(starter)
+
+  sessions          Session[]
+  accounts          Account[]
+  members           Member[]
+  invitations       Invitation[]       @relation("Inviter")
+  profile           UserProfile?
+  location          UserLocation?
+  scanBalance       ScanBalance?
+  scanLedgers       ScanLedger[]       @relation("ScanLedgerUser")
+  grantedScans      ScanLedger[]       @relation("ScanGrantedBy")
+  scans             Scan[]
+  scanFeedbacks     ScanFeedback[]
+  chatConversations ChatConversation[]
+  products          Product[]          @relation("ProductCreator")
+  billingProfile    BillingProfile?
+  payments          Payment[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id             String   @id
+  expiresAt      DateTime
+  token          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  impersonatedBy String?
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ─── better-auth organization plugin ────────────────────────────────────────
+
+model Organization {
+  id        String   @id
+  name      String
+  slug      String   @unique
+  logo      String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  members     Member[]
+  invitations Invitation[]
+  products    Product[]
+  scans       Scan[]
+
+  @@map("organization")
+}
+
+model Member {
+  id             String       @id
+  userId         String
+  organizationId String
+  role           String       @default("member")
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id
+  email          String
+  inviterId      String
+  organizationId String
+  role           String?
+  status         String       @default("pending")
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime
+  inviter        User         @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@map("invitation")
+}
+
+// ─── Aura domain ────────────────────────────────────────────────────────────
+
+enum BiologicalSex {
+  female
+  male
+  intersex
+  prefer_not_to_say
+}
+
+enum SkinType {
+  oily
+  dry
+  combination
+  sensitive
+  normal
+}
+
+enum FitzpatrickBand {
+  I
+  II
+  III
+  IV
+  V
+  VI
+}
+
+enum SkinDosha {
+  vata
+  pitta
+  kapha
+  balanced
+}
+
+enum AgeBand {
+  under_18
+  age_18_24
+  age_25_34
+  age_35_44
+  age_45_54
+  age_55_64
+  age_65_plus
+}
+
+enum LocationSource {
+  manual
+  geocode
+  browser
+}
+
+enum ClimateBand {
+  low
+  moderate
+  high
+  extreme
+}
+
+enum ScanLedgerReason {
+  signup_bonus
+  admin_grant
+  pack_grant
+  scan_debit
+  chat_token_debit
+  tier_upgrade
+  adjustment
+}
+
+enum ChatConversationKind {
+  advice
+  follow_up
+}
+
+enum ChatMessageRole {
+  user
+  assistant
+  system_refusal
+}
+
+enum AiProvider {
+  gemini
+  vercel_ai
+  openrouter
+  other
+}
+
+enum ScanTier {
+  starter
+  plus
+  pro
+}
+
+enum PaymentProvider {
+  mock
+  stripe
+}
+
+enum PaymentStatus {
+  pending
+  requires_action
+  succeeded
+  failed
+  refunded
+}
+
+enum ScanCaptureMode {
+  still
+  live
+}
+
+model AiModelRate {
+  id                     String     @id @default(cuid())
+  provider               AiProvider
+  modelId                String
+  displayName            String?
+  inputMicrosPer1M       Int
+  outputMicrosPer1M      Int
+  cachedInputMicrosPer1M Int        @default(0)
+  isActive               Boolean    @default(true)
+  isScanDefault          Boolean    @default(false)
+  supportsVision         Boolean    @default(true)
+  supportsLive           Boolean    @default(false)
+  assignedTier           ScanTier?
+  thinkingLevel          String?
+  effectiveFrom          DateTime   @default(now())
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  @@unique([provider, modelId])
+  // A tier holds at most one still model and one live model.
+  @@unique([assignedTier, supportsLive])
+  @@index([isActive])
+  @@index([isScanDefault])
+  @@map("ai_model_rate")
+}
+
+enum ScanStatus {
+  pending
+  processing
+  completed
+  failed
+  cancelled
+}
+
+enum AssessmentBand {
+  minimal
+  mild
+  moderate
+  elevated
+  not_assessed
+}
+
+enum ReportFormat {
+  pdf
+  json
+}
+
+model UserProfile {
+  id                     String           @id @default(cuid())
+  userId                 String           @unique
+  user                   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth            DateTime?
+  ageBand                AgeBand?
+  biologicalSex          BiologicalSex?
+  skinType               SkinType?
+  fitzpatrickBand        FitzpatrickBand?
+  skinDosha              SkinDosha?
+  primaryConcerns        String[]         @default([])
+  skinGoals              String[]         @default([])
+  allergies              String?
+  currentRoutine         Json?
+  previousPrescriptions  Json?
+  medications            Json?
+  lifestyleFactors       Json?
+  consentVersion         String?
+  consentAcceptedAt      DateTime?
+  photoProcessingConsent Boolean          @default(false)
+  marketingConsent       Boolean          @default(false)
+  onboardingStep         String           @default("welcome")
+  onboardingCompletedAt  DateTime?
+  expertReviewRequested  Boolean          @default(false)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  @@index([onboardingCompletedAt])
+  @@map("user_profile")
+}
+
+model UserLocation {
+  id              String         @id @default(cuid())
+  userId          String         @unique
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  city            String?
+  region          String?
+  country         String?
+  postalCode      String?
+  latitude        Float?
+  longitude       Float?
+  timezone        String?
+  locationSource  LocationSource @default(manual)
+  uvIndexBand     ClimateBand?
+  humidityBand    ClimateBand?
+  temperatureBand ClimateBand?
+  climateZone     String?
+  seasonBand      String?
+  lastSyncedAt    DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("user_location")
+}
+
+model ScanBalance {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remaining            Int      @default(0)
+  lifetimeUsed         Int      @default(0)
+  lifetimeGranted      Int      @default(0)
+  // Usage since the current plan started. Reset whenever a pack replaces the
+  // balance, so "scans used" reflects the plan a user is on right now.
+  periodUsed           Int       @default(0)
+  periodGranted        Int       @default(0)
+  periodStartedAt      DateTime?
+  tokenBudgetRemaining BigInt   @default(0)
+  lifetimeTokensUsed   BigInt   @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("scan_balance")
+}
+
+model ScanLedger {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation("ScanLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
+  delta       Int
+  reason      ScanLedgerReason
+  tier        ScanTier
+  scanId      String?
+  scan        Scan?            @relation(fields: [scanId], references: [id], onDelete: SetNull)
+  packId      String?
+  pack        ScanPack?        @relation(fields: [packId], references: [id], onDelete: SetNull)
+  grantedById String?
+  grantedBy   User?            @relation("ScanGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+
+  @@index([userId])
+  @@index([scanId])
+  @@index([createdAt])
+  @@map("scan_ledger")
+}
+
+model ScanPack {
+  id         String       @id @default(cuid())
+  tier       ScanTier
+  scanCount  Int
+  priceCents Int
+  label      String
+  isActive   Boolean      @default(true)
+  sortOrder  Int          @default(0)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  ledgers    ScanLedger[]
+  payments   Payment[]
+
+  @@index([tier, isActive])
+  @@map("scan_pack")
+}
+
+// ─── billing ────────────────────────────────────────────────────────────────
+
+// User-editable billing identity. Snapshotted onto Payment at purchase time so a
+// later edit never rewrites an issued receipt.
+model BillingProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName     String
+  email        String
+  phone        String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  country      String?
+  taxId        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("billing_profile")
+}
+
+model Payment {
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  packId          String?
+  pack            ScanPack?       @relation(fields: [packId], references: [id], onDelete: SetNull)
+  provider        PaymentProvider @default(mock)
+  providerRef     String          @unique
+  status          PaymentStatus   @default(pending)
+  amountCents     Int
+  currency        String          @default("USD")
+  tier            ScanTier
+  scanCount       Int
+  receiptNumber   String          @unique
+  billingSnapshot Json?
+  cardBrand       String?
+  cardLast4       String?
+  failureReason   String?
+  paidAt          DateTime?
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId, createdAt])
+  @@map("payment")
+}
+
+model Product {
+  id                String        @id @default(cuid())
+  sku               String        @unique
+  name              String
+  slug              String        @unique
+  description       String
+  category          String
+  ingredients       String?
+  ingredientList    String[]      @default([])
+  targetConcerns    String[]      @default([])
+  suitableSkinTypes String[]      @default([])
+  climateTags       String[]      @default([])
+  imageUrl          String?
+  storeUrl          String?
+  isActive          Boolean       @default(true)
+  createdById       String
+  createdBy         User          @relation("ProductCreator", fields: [createdById], references: [id])
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([isActive])
+  @@index([organizationId])
+  @@map("product")
+}
+
+model Ingredient {
+  id                String   @id @default(cuid())
+  inciName          String   @unique
+  displayName       String?
+  synonyms          String[] @default([])
+  targetConcerns    String[] @default([])
+  suitableSkinTypes String[] @default([])
+  climateTags       String[] @default([])
+  doshaAffinities   String[] @default([])
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([targetConcerns])
+  @@map("ingredient")
+}
+
+model Scan {
+  id                String             @id @default(cuid())
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId    String?
+  organization      Organization?      @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  status            ScanStatus         @default(pending)
+  captureMode       ScanCaptureMode    @default(still)
+  profileSnapshot   Json?
+  locationSnapshot  Json?
+  consentSnapshot   Json?
+  imageRetained     Boolean            @default(false)
+  imageStorageKey   String?
+  imageMimeType     String?
+  imageData         Bytes?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  usage             ScanUsage?
+  result            ScanResult?
+  report            Report?
+  feedback          ScanFeedback?
+  scanLedgers       ScanLedger[]
+  chatConversations ChatConversation[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("scan")
+}
+
+model ScanUsage {
+  id                  String     @id @default(cuid())
+  scanId              String     @unique
+  scan                Scan       @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  provider            AiProvider
+  modelId             String
+  inputTokens         Int        @default(0)
+  outputTokens        Int        @default(0)
+  cachedTokens        Int        @default(0)
+  reasoningTokens     Int?
+  totalTokens         Int        @default(0)
+  estimatedCostMicros Int?
+  latencyMs           Int?
+  rawUsage            Json?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  @@index([createdAt])
+  @@index([modelId])
+  @@map("scan_usage")
+}
+
+model ScanResult {
+  id                     String         @id @default(cuid())
+  scanId                 String         @unique
+  scan                   Scan           @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  overallBand            AssessmentBand @default(not_assessed)
+  dimensions             Json?
+  doshaTyping            Json?
+  summary                String?
+  concernsNotVisible     Json?
+  naturalRecommendations Json?
+  recommendations        Json?
+  disclaimerVersion      String         @default("1.0")
+  reportFormatVersion    String         @default("1.0")
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  @@map("scan_result")
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  scanId      String       @unique
+  scan        Scan         @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  format      ReportFormat @default(pdf)
+  storageKey  String?
+  generatedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("report")
+}
+
+model ScanFeedback {
+  id        String   @id @default(cuid())
+  scanId    String   @unique
+  scan      Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  message   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("scan_feedback")
+}
+
+model ChatConversation {
+  id        String               @id @default(cuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scanId    String?
+  scan      Scan?                @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  kind      ChatConversationKind
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  messages  ChatMessage[]
+
+  @@index([userId])
+  @@index([scanId])
+  @@index([userId, kind])
+  @@map("chat_conversation")
+}
+
+model ChatMessage {
+  id                  String           @id @default(cuid())
+  conversationId      String
+  conversation        ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role                ChatMessageRole
+  content             String
+  imageMimeType       String?
+  imageData           Bytes?
+  inputTokens         Int              @default(0)
+  outputTokens        Int              @default(0)
+  cachedTokens        Int              @default(0)
+  reasoningTokens     Int?
+  totalTokens         Int              @default(0)
+  modelId             String?
+  estimatedCostMicros Int?
+  metadata            Json?
+  blocked             Boolean          @default(false)
+  createdAt           DateTime         @default(now())
+
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+  @@index([modelId])
+  @@index([createdAt])
+  @@map("chat_message")
+}
+
+enum AiUsageFeature {
+  scan_analyze
+  scan_live
+  chat_reply
+  /// Constrained second pass that turns a chat reply into recommendation cards.
+  chat_recommendations
+  chat_guardrail
+  transcribe
+}
+
+/// Single log of every billable provider call. Written alongside ScanUsage /
+/// ChatMessage, which stay the source of truth for per-scan display and token
+/// budgeting. Reference columns are plain ids without foreign keys so spend
+/// history survives scan, conversation, and user deletion.
+model AiUsage {
+  id                  String         @id @default(cuid())
+  feature             AiUsageFeature
+  provider            AiProvider
+  modelId             String
+  userId              String?
+  scanId              String?
+  conversationId      String?
+  chatMessageId       String?        @unique
+  inputTokens         Int            @default(0)
+  outputTokens        Int            @default(0)
+  cachedTokens        Int            @default(0)
+  reasoningTokens     Int?
+  totalTokens         Int            @default(0)
+  estimatedCostMicros Int?
+  marginMicros        Int?
+  latencyMs           Int?
+  rawUsage            Json?
+  createdAt           DateTime       @default(now())
+
+  @@index([createdAt])
+  @@index([feature, createdAt])
+  @@index([modelId, createdAt])
+  @@index([userId, createdAt])
+  @@index([scanId])
+  @@map("ai_usage")
+}

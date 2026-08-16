@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Aurora Organics">
+  <title>Aurora Organics</title>
+  <!-- Maskable variant of assets/brand/logo.svg: full-bleed brand orange with
+       the mark scaled to 78% and centered, so it survives Android's circle and
+       squircle masks (which only guarantee the middle 80% of the canvas).
+       Keep the artwork below in sync with logo.svg. -->
+  <defs>
+    <path id="leaf" d="M0 0 C.34 -.17 .74 -.17 1 0 C.74 .17 .34 .17 0 0 Z" />
+  </defs>
+
+  <rect width="512" height="512" fill="#ff6900" />
+
+  <g transform="translate(256 256) scale(0.78) translate(-256 -256)">
+    <circle cx="256" cy="256" r="250" fill="#ff6900" />
+
+    <path
+      d="M116 407 L258 78 L400 407"
+      fill="none"
+      stroke="#111111"
+      stroke-width="16"
+      stroke-linecap="butt"
+      stroke-linejoin="miter"
+    />
+
+    <g fill="#111111">
+      <path
+        d="M84 213 C 132 224 176 250 210 278 C 244 306 268 326 292 341 C 314 350 334 352 356 352"
+        fill="none"
+        stroke="#111111"
+        stroke-width="7"
+        stroke-linecap="round"
+      />
+      <ellipse cx="69" cy="208" rx="16" ry="13" transform="rotate(-16 69 208)" />
+
+      <use href="#leaf" transform="translate(136,238) rotate(-62) scale(54)" />
+      <use href="#leaf" transform="translate(216,283) rotate(-70) scale(46)" />
+
+      <use href="#leaf" transform="translate(264,315) rotate(-49) scale(60)" />
+      <use href="#leaf" transform="translate(283,335) rotate(-24) scale(60)" />
+      <use href="#leaf" transform="translate(312,345) rotate(-26) scale(48)" />
+      <use href="#leaf" transform="translate(290,342) rotate(156) scale(58)" />
+      <use href="#leaf" transform="translate(290,343) rotate(139) scale(58)" />
+    </g>
+  </g>
+</svg>

@@ -1,8 +1,10 @@
 import { LandingBenefits } from "@/components/marketing/landing-benefits"
 import { LandingCta } from "@/components/marketing/landing-cta"
 import { LandingFaq } from "@/components/marketing/landing-faq"
+import { LandingFooter } from "@/components/marketing/landing-footer"
 import { LandingHero } from "@/components/marketing/landing-hero"
 import { LandingHowItWorks } from "@/components/marketing/landing-how-it-works"
+import { LandingProofPoints } from "@/components/marketing/landing-proof-points"
 
 export function LandingPageContent() {
   return (
@@ -10,8 +12,10 @@ export function LandingPageContent() {
       <LandingHero />
       <LandingBenefits />
       <LandingHowItWorks />
-      <LandingCta />
+      <LandingProofPoints />
       <LandingFaq />
+      <LandingCta />
+      <LandingFooter />
     </div>
   )
 }

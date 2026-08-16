@@ -1,9 +1,9 @@
+import { OnboardingFrame } from "@/components/onboarding/onboarding-chrome"
+
+/**
+ * Layout shell for the onboarding route group. All the visual treatment lives
+ * in OnboardingFrame so the skeleton and the real wizard share one silhouette.
+ */
 export function OnboardingShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-svh flex-col">
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-6 py-12">
-        {children}
-      </main>
-    </div>
-  )
+  return <OnboardingFrame>{children}</OnboardingFrame>
 }
