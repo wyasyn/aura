@@ -1,5 +1,6 @@
+import Link from "next/link"
+
 import { Button } from "@/components/ui/button"
-import { CONSULTATION_BOOKING_URL } from "@/lib/scan/constants"
 import { cn } from "@/lib/utils"
 
 type ConsultationBookingButtonProps = {
@@ -16,13 +17,7 @@ export function ConsultationBookingButton({
       size="sm"
       className={cn("h-8 w-fit text-xs", className)}
     >
-      <a
-        href={CONSULTATION_BOOKING_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        Book a consultation
-      </a>
+      <Link href="/experts">Book a consultation</Link>
     </Button>
   )
 }

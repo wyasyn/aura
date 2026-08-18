@@ -1,20 +1,29 @@
 import type { TablerIcon } from "@tabler/icons-react"
 import {
   IconBrain,
+  IconBuildingHospital,
+  IconCalendarEvent,
+  IconCalendarTime,
   IconChartBar,
   IconCoin,
   IconCreditCard,
+  IconGift,
   IconHome,
   IconLock,
   IconMessage,
   IconPackage,
+  IconPalette,
+  IconPlug,
   IconScan,
   IconSettings,
+  IconStethoscope,
+  IconTag,
   IconUser,
+  IconUserCheck,
   IconUsers,
 } from "@tabler/icons-react"
 
-export type AppRole = "user" | "admin" | "expert" | "company_admin"
+export type AppRole = "user" | "admin" | "expert" | "company_admin" | "affiliate"
 
 export type NavItem = {
   href: string
@@ -46,11 +55,48 @@ const YOUR_DATA: NavSection = {
   ],
 }
 
+const MARKETPLACE: NavSection = {
+  title: "Experts",
+  items: [
+    { href: "/experts", label: "Talk to an expert", icon: IconStethoscope },
+    { href: "/dashboard/appointments", label: "My appointments", icon: IconCalendarEvent },
+  ],
+}
+
 const ACCOUNT: NavSection = {
   title: "Account",
   items: [
     { href: "/dashboard/billing", label: "Billing", icon: IconCreditCard },
+    { href: "/dashboard/expert-application", label: "Become an expert", icon: IconUserCheck },
+    { href: "/dashboard/affiliate-application", label: "Become an affiliate", icon: IconGift },
     { href: "/settings", label: "Settings", icon: IconSettings },
+  ],
+}
+
+const EXPERT: NavSection = {
+  title: "Expert",
+  items: [
+    { href: "/expert", label: "Bookings", icon: IconCalendarEvent },
+    { href: "/expert/availability", label: "Availability", icon: IconCalendarTime },
+  ],
+}
+
+const AFFILIATE: NavSection = {
+  title: "Affiliate",
+  items: [{ href: "/affiliate", label: "Dashboard", icon: IconGift }],
+}
+
+// Only ever reachable on a clinic's own subdomain; the routes themselves 404
+// on the platform host, where there is no tenant to resolve.
+const CLINIC: NavSection = {
+  title: "Clinic",
+  items: [
+    { href: "/clinic", label: "Patients", icon: IconUsers },
+    { href: "/clinic/analytics", label: "Analytics", icon: IconChartBar },
+    { href: "/clinic/team", label: "Team", icon: IconUserCheck },
+    { href: "/clinic/branding", label: "Branding", icon: IconPalette },
+    { href: "/clinic/billing", label: "Billing", icon: IconCreditCard },
+    { href: "/clinic/api", label: "API", icon: IconPlug },
   ],
 }
 
@@ -62,7 +108,11 @@ const ADMIN: NavSection = {
     { href: "/admin/users", label: "Users", icon: IconUsers },
     { href: "/admin/tokens", label: "Allowances", icon: IconCoin },
     { href: "/admin/models", label: "Models", icon: IconBrain },
+    { href: "/admin/scan-packs", label: "Scan packs", icon: IconTag },
     { href: "/admin/products", label: "Products", icon: IconPackage },
+    { href: "/admin/experts", label: "Expert applications", icon: IconStethoscope },
+    { href: "/admin/affiliates", label: "Affiliates", icon: IconGift },
+    { href: "/admin/clinics", label: "Clinics", icon: IconBuildingHospital },
     { href: "/admin/feedback", label: "Feedback", icon: IconMessage },
   ],
 }
@@ -72,7 +122,19 @@ export function canSeeAdminNav(role: AppRole): boolean {
 }
 
 export function getNavSections(role: AppRole): NavSection[] {
-  const sections: NavSection[] = [OVERVIEW, YOUR_DATA, ACCOUNT]
+  const sections: NavSection[] = [OVERVIEW, YOUR_DATA, MARKETPLACE, ACCOUNT]
+
+  if (role === "expert") {
+    sections.push(EXPERT)
+  }
+
+  if (role === "affiliate") {
+    sections.push(AFFILIATE)
+  }
+
+  if (role === "company_admin") {
+    sections.push(CLINIC)
+  }
 
   if (canSeeAdminNav(role)) {
     sections.push(ADMIN)
@@ -81,7 +143,13 @@ export function getNavSections(role: AppRole): NavSection[] {
   return sections
 }
 
-const EXACT_MATCH_HREFS = new Set(["/dashboard", "/admin"])
+const EXACT_MATCH_HREFS = new Set([
+  "/dashboard",
+  "/admin",
+  "/expert",
+  "/affiliate",
+  "/clinic",
+])
 
 export function isNavItemActive(pathname: string, href: string): boolean {
   if (pathname === href) {
@@ -111,6 +179,8 @@ export function getRoleLabel(role: AppRole): string {
       return "Expert"
     case "company_admin":
       return "Company admin"
+    case "affiliate":
+      return "Affiliate"
     default:
       return "Member"
   }
@@ -121,4 +191,5 @@ export const ASSIGNABLE_ROLES: AppRole[] = [
   "admin",
   "expert",
   "company_admin",
+  "affiliate",
 ]

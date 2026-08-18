@@ -194,7 +194,7 @@ export function LandingHero() {
           >
             <li className="flex items-center gap-2">
               <IconGift className="size-4 shrink-0 text-primary" aria-hidden />
-              Three free scans, no card required
+              One free scan, no card required
             </li>
             <li className="flex items-center gap-2">
               <IconLock className="size-4 shrink-0 text-primary" aria-hidden />

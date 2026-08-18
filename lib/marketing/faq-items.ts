@@ -42,13 +42,13 @@ export const MARKETING_FAQ_ITEMS: MarketingFaqItem[] = [
   {
     question: "How many scans do I get?",
     answer:
-      "Three free Starter scans when you sign up, then one scan per saved analysis. Starter and Thinking cover still photos; Pro adds live camera scans.",
+      "One free Starter scan when you sign up, then one scan per saved analysis. Starter and Thinking cover still photos; Pro adds live camera scans.",
     featured: true,
   },
   {
     question: "What are scan tiers?",
     answer:
-      "Starter, Thinking, and Pro. Starter covers still scans with three free on signup. Thinking goes deeper. Pro adds live camera scans. Each saved analysis uses one scan.",
+      "Starter, Thinking, and Pro. Starter covers still scans with one free on signup. Thinking goes deeper. Pro adds live camera scans. Each saved analysis uses one scan.",
   },
   {
     question: "What do the skin bands mean?",

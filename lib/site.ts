@@ -11,7 +11,7 @@ export const SITE_SHORT_NAME = "Aurora"
 export const SITE_TAGLINE = "Skin intelligence"
 
 export const SITE_DESCRIPTION =
-  "Scan your skin and get a cosmetic assessment in plain-language bands, an Ayurvedic skin lean, and Aurora Organics product matches filtered to your allergies and local climate. Three free scans, and your photo is never stored."
+  "Scan your skin and get a cosmetic assessment in plain-language bands, an Ayurvedic skin lean, and Aurora Organics product matches filtered to your allergies and local climate. One free scan, and your photo is never stored."
 
 /**
  * Hex mirrors of the `--background` tokens in app/globals.css. The browser

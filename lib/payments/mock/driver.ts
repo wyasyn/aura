@@ -38,17 +38,22 @@ export const mockPaymentDriver: PaymentDriver = {
   },
 
   async confirmIntent(input: ConfirmIntentInput): Promise<PaymentIntent> {
+    if (!input.card) {
+      throw new Error("Mock driver requires card details")
+    }
+    const card = input.card
+
     await wait(simulatedDelayMs())
 
     const base = {
       ref: input.ref,
       amountCents: input.amountCents,
       currency: input.currency,
-      cardBrand: getCardBrand(input.card.number),
-      cardLast4: getCardLast4(input.card.number),
+      cardBrand: getCardBrand(card.number),
+      cardLast4: getCardLast4(card.number),
     }
 
-    const outcome = getTestCardOutcome(input.card.number)
+    const outcome = getTestCardOutcome(card.number)
 
     switch (outcome) {
       case "declined":

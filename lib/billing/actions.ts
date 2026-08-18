@@ -3,17 +3,18 @@
 import { randomUUID } from "node:crypto"
 import { revalidatePath } from "next/cache"
 
-import type { BillingProfile, Prisma } from "@/generated/prisma/client"
+import type { Payment, BillingProfile, Prisma } from "@/generated/prisma/client"
 import { requireSession } from "@/lib/auth/session"
 import {
   billingProfileSchema,
   confirmPaymentSchema,
+  confirmStripePaymentSchema,
   startCheckoutSchema,
 } from "@/lib/billing/schemas"
 import { prisma } from "@/lib/db/client"
 import { sendReceiptEmail } from "@/lib/email/send-receipt"
 import { getPaymentCurrency, getPaymentDriver } from "@/lib/payments"
-import { getCardBrand, getCardLast4 } from "@/lib/payments/card-schema"
+import type { PaymentIntent } from "@/lib/payments/types"
 import { nextReceiptNumber } from "@/lib/payments/receipt-number"
 import { grantPackScans } from "@/lib/scans/balance"
 
@@ -56,6 +57,9 @@ export type StartCheckoutResult = ActionResult<{
   currency: string
   scanCount: number
   packLabel: string
+  provider: string
+  /** Only set for gateways that confirm client-side (Stripe). */
+  clientSecret?: string
 }>
 
 export async function startCheckoutAction(
@@ -119,6 +123,8 @@ export async function startCheckoutAction(
     currency,
     scanCount: pack.scanCount,
     packLabel: pack.label,
+    provider: driver.id,
+    clientSecret: intent.clientSecret,
   }
 }
 
@@ -141,24 +147,8 @@ export async function confirmPaymentAction(
   }
 
   const { paymentId, card } = parsed.data
-  const payment = await prisma.payment.findFirst({
-    where: { id: paymentId, userId: session.user.id },
-  })
-
-  if (!payment) {
-    return { ok: false, error: "Payment not found" }
-  }
-  if (payment.status === "succeeded") {
-    return {
-      ok: true,
-      status: "succeeded",
-      scanCount: payment.scanCount,
-      receiptNumber: payment.receiptNumber,
-    }
-  }
-  if (payment.status === "refunded") {
-    return { ok: false, error: "This payment was refunded" }
-  }
+  const payment = await loadPayableOrThrow(paymentId, session.user.id)
+  if ("result" in payment) return payment.result
 
   const driver = getPaymentDriver()
   const intent = await driver.confirmIntent({
@@ -169,12 +159,94 @@ export async function confirmPaymentAction(
     previousStatus: payment.status,
   })
 
-  const cardBrand = getCardBrand(card.number)
-  const cardLast4 = getCardLast4(card.number)
+  return finalizePaymentIntent(payment, intent)
+}
+
+/**
+ * For gateways that confirm client-side (Stripe): the browser already
+ * confirmed the PaymentIntent via Stripe.js, this just re-reads the
+ * authoritative status from the driver and grants scans if it succeeded.
+ * The webhook handler performs the same finalize step independently, so
+ * this is a fast-path for the UI, not the only source of truth.
+ */
+export async function confirmStripePaymentAction(
+  input: unknown,
+): Promise<ConfirmPaymentResult> {
+  const session = await requireSession()
+  const parsed = confirmStripePaymentSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: "Payment not found" }
+  }
+
+  const payment = await loadPayableOrThrow(parsed.data.paymentId, session.user.id)
+  if ("result" in payment) return payment.result
+
+  if (payment.provider !== "stripe") {
+    return { ok: false, error: "This payment is not a Stripe payment" }
+  }
+
+  const driver = getPaymentDriver()
+  const intent = await driver.confirmIntent({
+    ref: payment.providerRef,
+    amountCents: payment.amountCents,
+    currency: payment.currency,
+    previousStatus: payment.status,
+  })
+
+  return finalizePaymentIntent(payment, intent)
+}
+
+/** Loads a payment the caller owns, short-circuiting terminal states. */
+async function loadPayableOrThrow(
+  paymentId: string,
+  userId: string,
+): Promise<Payment | { result: ConfirmPaymentResult }> {
+  const payment = await prisma.payment.findFirst({
+    where: { id: paymentId, userId },
+  })
+
+  if (!payment) {
+    return { result: { ok: false, error: "Payment not found" } }
+  }
+  if (payment.status === "succeeded") {
+    return {
+      result: {
+        ok: true,
+        status: "succeeded",
+        scanCount: payment.scanCount,
+        receiptNumber: payment.receiptNumber,
+      },
+    }
+  }
+  if (payment.status === "refunded") {
+    return { result: { ok: false, error: "This payment was refunded" } }
+  }
+
+  return payment
+}
+
+/**
+ * Shared by confirmPaymentAction, confirmStripePaymentAction, and the Stripe
+ * webhook handler. Idempotent: a compare-and-set on Payment.status ensures
+ * only one caller ever grants scans for a given payment, no matter how many
+ * times (client confirm + webhook, retries, ...) this runs for it.
+ */
+export async function finalizePaymentIntent(
+  payment: Payment,
+  intent: PaymentIntent,
+): Promise<ConfirmPaymentResult> {
+  const cardBrand = intent.cardBrand ?? null
+  const cardLast4 = intent.cardLast4 ?? null
 
   if (intent.status !== "succeeded") {
-    await prisma.payment.update({
-      where: { id: payment.id },
+    // Guard against an out-of-order webhook event (e.g. a stale
+    // payment_intent.payment_failed arriving after payment_intent.succeeded
+    // was already processed) downgrading a payment that already succeeded.
+    await prisma.payment.updateMany({
+      where: {
+        id: payment.id,
+        status: { in: ["pending", "requires_action", "failed"] },
+      },
       data: {
         status: intent.status,
         cardBrand,
@@ -195,13 +267,17 @@ export async function confirmPaymentAction(
   }
 
   const profile = await prisma.billingProfile.findUnique({
-    where: { userId: session.user.id },
+    where: { userId: payment.userId },
   })
 
-  // Compare-and-set: only the attempt that flips the row away from a payable
-  // status gets to grant, so a double submit can never grant twice.
+  // Compare-and-set: only the attempt that flips the row to succeeded gets to
+  // grant, so a double submit (or webhook racing the client confirm) can
+  // never grant twice. "failed" is included because a Stripe PaymentIntent
+  // can be retried with a new payment method after a decline and succeed on
+  // the same intent — only "succeeded" and "refunded" are truly terminal
+  // (both already short-circuited before this function is called).
   const claimed = await prisma.payment.updateMany({
-    where: { id: payment.id, status: { in: ["pending", "requires_action"] } },
+    where: { id: payment.id, status: { in: ["pending", "requires_action", "failed"] } },
     data: {
       status: "succeeded",
       paidAt: new Date(),
@@ -229,7 +305,7 @@ export async function confirmPaymentAction(
 
   try {
     await grantPackScans({
-      userId: session.user.id,
+      userId: payment.userId,
       packId: payment.packId,
       metadata: {
         paymentId: payment.id,
@@ -252,7 +328,7 @@ export async function confirmPaymentAction(
 
   // Delivery is best-effort. The receipt is always downloadable from billing
   // history, so a bounced email must not fail a completed purchase.
-  await sendReceiptEmail(payment.id, session.user.id)
+  await sendReceiptEmail(payment.id, payment.userId)
 
   revalidateBilling()
   return {

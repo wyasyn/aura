@@ -13,10 +13,43 @@ const appleConfigured =
   Boolean(process.env.APPLE_CLIENT_ID) &&
   Boolean(process.env.APPLE_CLIENT_SECRET)
 
+/**
+ * White-label clinics are served on their own subdomains, which are different
+ * origins from BETTER_AUTH_URL. Without these patterns better-auth rejects
+ * every auth request from a clinic's site with "Invalid origin", so no patient
+ * or staff member can sign in there at all.
+ *
+ * Wildcards are matched by better-auth against the request origin when the
+ * pattern includes a scheme (see auth/trusted-origins).
+ */
+function tenantTrustedOrigins(): string[] {
+  const origins: string[] = []
+
+  const root = process.env.NEXT_PUBLIC_TENANT_ROOT_DOMAIN?.trim().toLowerCase()
+  if (root) {
+    origins.push(`https://*.${root}`)
+  }
+
+  // Local development serves tenants at <subdomain>.localhost on the dev port.
+  const baseUrl = process.env.BETTER_AUTH_URL
+  if (baseUrl?.includes("localhost")) {
+    let port = "3000"
+    try {
+      port = new URL(baseUrl).port || "3000"
+    } catch {
+      // Malformed BETTER_AUTH_URL; fall back to the default dev port.
+    }
+    origins.push(`http://*.localhost:${port}`)
+  }
+
+  return origins
+}
+
 export const auth = betterAuth({
   appName: "Aurora Organics",
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
+  trustedOrigins: tenantTrustedOrigins(),
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),

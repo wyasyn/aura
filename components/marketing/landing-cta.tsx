@@ -120,7 +120,7 @@ export function LandingCta() {
                     className="text-primary size-4 shrink-0"
                     aria-hidden
                   />
-                  Three free scans, no card
+                  One free scan, no card
                 </li>
                 <li className="flex items-center gap-2">
                   <IconLock

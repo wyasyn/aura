@@ -26,21 +26,29 @@ model User {
   onboardingCompleted Boolean?  @default(false)
   scanTier            ScanTier  @default(starter)
 
-  sessions          Session[]
-  accounts          Account[]
-  members           Member[]
-  invitations       Invitation[]       @relation("Inviter")
-  profile           UserProfile?
-  location          UserLocation?
-  scanBalance       ScanBalance?
-  scanLedgers       ScanLedger[]       @relation("ScanLedgerUser")
-  grantedScans      ScanLedger[]       @relation("ScanGrantedBy")
-  scans             Scan[]
-  scanFeedbacks     ScanFeedback[]
-  chatConversations ChatConversation[]
-  products          Product[]          @relation("ProductCreator")
-  billingProfile    BillingProfile?
-  payments          Payment[]
+  sessions                      Session[]
+  accounts                      Account[]
+  members                       Member[]
+  invitations                   Invitation[]       @relation("Inviter")
+  profile                       UserProfile?
+  location                      UserLocation?
+  scanBalance                   ScanBalance?
+  scanLedgers                   ScanLedger[]       @relation("ScanLedgerUser")
+  grantedScans                  ScanLedger[]       @relation("ScanGrantedBy")
+  scans                         Scan[]
+  scanFeedbacks                 ScanFeedback[]
+  chatConversations             ChatConversation[]
+  products                      Product[]          @relation("ProductCreator")
+  billingProfile                BillingProfile?
+  payments                      Payment[]
+  expertProfile                 ExpertProfile?
+  expertApplicationsReviewed    ExpertProfile[]    @relation("ExpertReviewedBy")
+  bookings                      Booking[]          @relation("BookingUser")
+  expertReviews                 ExpertReview[]     @relation("ReviewUser")
+  affiliateProfile              AffiliateProfile?
+  affiliateApplicationsReviewed AffiliateProfile[] @relation("AffiliateReviewedBy")
+  affiliatePayoutsRecorded      AffiliatePayout[]  @relation("AffiliatePayoutCreatedBy")
+  apiKeysCreated                ApiKey[]           @relation("ApiKeyCreatedBy")
 
   @@unique([email])
   @@map("user")
@@ -109,6 +117,10 @@ model Organization {
   invitations Invitation[]
   products    Product[]
   scans       Scan[]
+  // White-label config lives in its own model so this one stays exactly as
+  // better-auth's organization plugin expects it.
+  clinic      ClinicSettings?
+  apiKeys     ApiKey[]
 
   @@map("organization")
 }
@@ -355,21 +367,21 @@ model UserLocation {
 }
 
 model ScanBalance {
-  id                   String   @id @default(cuid())
-  userId               String   @unique
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  remaining            Int      @default(0)
-  lifetimeUsed         Int      @default(0)
-  lifetimeGranted      Int      @default(0)
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remaining            Int       @default(0)
+  lifetimeUsed         Int       @default(0)
+  lifetimeGranted      Int       @default(0)
   // Usage since the current plan started. Reset whenever a pack replaces the
   // balance, so "scans used" reflects the plan a user is on right now.
   periodUsed           Int       @default(0)
   periodGranted        Int       @default(0)
   periodStartedAt      DateTime?
-  tokenBudgetRemaining BigInt   @default(0)
-  lifetimeTokensUsed   BigInt   @default(0)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  tokenBudgetRemaining BigInt    @default(0)
+  lifetimeTokensUsed   BigInt    @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@map("scan_balance")
 }
@@ -506,6 +518,227 @@ model Ingredient {
 
   @@index([targetConcerns])
   @@map("ingredient")
+}
+
+// ─── expert marketplace ─────────────────────────────────────────────────────
+
+enum ExpertSpecialty {
+  dermatologist
+  ayurvedic_practitioner
+}
+
+enum ExpertApplicationStatus {
+  pending
+  approved
+  rejected
+}
+
+enum BookingStatus {
+  pending_payment
+  confirmed
+  completed
+  cancelled
+  no_show
+}
+
+model ExpertProfile {
+  id                     String                  @id @default(cuid())
+  userId                 String                  @unique
+  user                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialty              ExpertSpecialty
+  headline               String
+  bio                    String
+  credentials            String
+  yearsExperience        Int
+  consultationPriceCents Int
+  status                 ExpertApplicationStatus @default(pending)
+  rejectionReason        String?
+  isAcceptingBookings    Boolean                 @default(true)
+  avgRating              Float?
+  reviewCount            Int                     @default(0)
+  appliedAt              DateTime                @default(now())
+  reviewedAt             DateTime?
+  reviewedById           String?
+  reviewedBy             User?                   @relation("ExpertReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  availabilitySlots ExpertAvailabilitySlot[]
+  bookings          Booking[]
+  reviews           ExpertReview[]
+
+  @@index([specialty, status])
+  @@index([status])
+  @@map("expert_profile")
+}
+
+model ExpertAvailabilitySlot {
+  id        String        @id @default(cuid())
+  expertId  String
+  expert    ExpertProfile @relation(fields: [expertId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  endTime   DateTime
+  isBooked  Boolean       @default(false)
+  booking   Booking?
+  createdAt DateTime      @default(now())
+
+  @@unique([expertId, startTime])
+  @@index([expertId, isBooked, startTime])
+  @@map("expert_availability_slot")
+}
+
+// Consultation booking. Tracks its own Stripe payment fields directly rather
+// than going through the scan-pack Payment ledger — a consultation is a
+// different product with a different lifecycle (a slot to hold, a video room
+// to create on success), and keeping it separate avoids touching the
+// already-shipped scan-pack payment/receipt pipeline.
+model Booking {
+  id       String                 @id @default(cuid())
+  userId   String
+  user     User                   @relation("BookingUser", fields: [userId], references: [id], onDelete: Cascade)
+  expertId String
+  expert   ExpertProfile          @relation(fields: [expertId], references: [id], onDelete: Cascade)
+  slotId   String                 @unique
+  slot     ExpertAvailabilitySlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  status   BookingStatus          @default(pending_payment)
+  notes    String?
+
+  amountCents          Int
+  currency             String          @default("USD")
+  paymentProvider      PaymentProvider @default(stripe)
+  paymentRef           String?         @unique
+  paidAt               DateTime?
+  cardBrand            String?
+  cardLast4            String?
+  paymentFailureReason String?
+
+  videoRoomUrl  String?
+  videoRoomName String?
+
+  review ExpertReview?
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  confirmedAt        DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  @@index([userId, createdAt])
+  @@index([expertId, createdAt])
+  @@index([status])
+  @@map("booking")
+}
+
+model ExpertReview {
+  id        String        @id @default(cuid())
+  bookingId String        @unique
+  booking   Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation("ReviewUser", fields: [userId], references: [id], onDelete: Cascade)
+  expertId  String
+  expert    ExpertProfile @relation(fields: [expertId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String?
+  createdAt DateTime      @default(now())
+
+  @@index([expertId, createdAt])
+  @@map("expert_review")
+}
+
+// ─── affiliate marketplace ──────────────────────────────────────────────────
+
+enum AffiliateApplicationStatus {
+  pending
+  approved
+  rejected
+}
+
+// Actual purchases happen on the external WooCommerce store, not in this
+// app — see AffiliateOrder. "confirmed" mirrors WooCommerce's "completed"
+// order status; "cancelled" covers both cancellation and refund, either of
+// which voids the commission.
+enum AffiliateOrderStatus {
+  pending
+  confirmed
+  cancelled
+}
+
+// Single global row (id is always "global") holding the current commission
+// and customer-discount rates. Each AffiliateOrder snapshots the rate that
+// applied at attribution time, so changing this never rewrites history.
+model AffiliateSettings {
+  id                  String   @id @default("global")
+  commissionRateBps   Int      @default(1000)
+  customerDiscountBps Int      @default(1000)
+  updatedAt           DateTime @updatedAt
+
+  @@map("affiliate_settings")
+}
+
+model AffiliateProfile {
+  id                  String                     @id @default(cuid())
+  userId              String                     @unique
+  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status              AffiliateApplicationStatus @default(pending)
+  howTheyPromote      String
+  website             String?
+  rejectionReason     String?
+  // Set on approval, once the WooCommerce coupon is created.
+  couponCode          String?                    @unique
+  wooCommerceCouponId Int?
+  appliedAt           DateTime                   @default(now())
+  reviewedAt          DateTime?
+  reviewedById        String?
+  reviewedBy          User?                      @relation("AffiliateReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  orders  AffiliateOrder[]
+  payouts AffiliatePayout[]
+
+  @@index([status])
+  @@map("affiliate_profile")
+}
+
+model AffiliateOrder {
+  id                        String               @id @default(cuid())
+  affiliateId               String
+  affiliate                 AffiliateProfile     @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  // The WooCommerce order id. Unique so a retried webhook delivery (WooCommerce
+  // resends on any non-2xx response) can never double-count a commission.
+  wooCommerceOrderId        Int                  @unique
+  status                    AffiliateOrderStatus @default(pending)
+  couponCode                String
+  orderTotalCents           Int
+  currency                  String
+  commissionRateBpsSnapshot Int
+  commissionAmountCents     Int
+  customerEmail             String?
+  placedAt                  DateTime
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  @@index([affiliateId, status])
+  @@map("affiliate_order")
+}
+
+// A manually-recorded payment to an affiliate, made outside the app (bank
+// transfer, etc.). Owed balance = confirmed AffiliateOrder commissions minus
+// the sum of these, computed on read rather than stored.
+model AffiliatePayout {
+  id          String           @id @default(cuid())
+  affiliateId String
+  affiliate   AffiliateProfile @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  amountCents Int
+  note        String?
+  paidAt      DateTime         @default(now())
+  createdById String?
+  createdBy   User?            @relation("AffiliatePayoutCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+
+  @@index([affiliateId])
+  @@map("affiliate_payout")
 }
 
 model Scan {
@@ -690,4 +923,105 @@ model AiUsage {
   @@index([userId, createdAt])
   @@index([scanId])
   @@map("ai_usage")
+}
+
+// ─── white-label enterprise (clinics & brands) ──────────────────────────────
+
+enum ClinicStatus {
+  active
+  suspended
+}
+
+// A subscription tier a clinic can sit on. Platform-admin editable, and each
+// row maps to a Stripe Price so what we show always matches what Stripe bills.
+model ClinicPlan {
+  id               String   @id @default(cuid())
+  name             String
+  description      String?
+  stripePriceId    String?  @unique
+  priceCents       Int
+  currency         String   @default("USD")
+  // "month" | "year" — kept as a string to match Stripe's own interval values.
+  interval         String   @default("month")
+  seatLimit        Int
+  monthlyScanQuota Int
+  isActive         Boolean  @default(true)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  clinics ClinicSettings[]
+
+  @@index([isActive, sortOrder])
+  @@map("clinic_plan")
+}
+
+// White-label configuration for one tenant. Deliberately separate from
+// Organization: better-auth's organization plugin owns and writes that table,
+// so adding our columns there would risk the plugin's own reads and writes.
+model ClinicSettings {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Serves the tenant at <subdomain>.<root domain>. Lowercased and checked
+  // against a reserved list before it is ever persisted.
+  subdomain String       @unique
+  status    ClinicStatus @default(active)
+
+  // Branding. A null field falls back to Aurora's own default everywhere it
+  // is consumed, so a half-configured clinic still renders correctly.
+  displayName  String
+  logoUrl      String?
+  primaryColor String?
+  accentColor  String?
+  supportEmail String?
+
+  planId String?
+  plan   ClinicPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  // Stripe's own status string rather than an enum: Stripe can introduce a
+  // status we haven't enumerated, and an unmapped value must not make the
+  // webhook throw and retry forever. Normalized through lib/clinics/subscription.
+  subscriptionStatus   String    @default("none")
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+
+  // Counted per billing period and reset when a new period starts, so a quota
+  // check never has to aggregate the whole scan table.
+  periodScanCount Int       @default(0)
+  periodStartedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("clinic_settings")
+}
+
+// A partner integration credential, scoped to one tenant.
+model ApiKey {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+
+  // Only a SHA-256 hash is stored. The plaintext key is shown once at creation
+  // and is unrecoverable afterwards, so a database leak does not hand over
+  // working credentials.
+  hashedKey String @unique
+  // Leading characters of the key, kept so a specific credential can be
+  // identified in the UI and in logs without storing the secret.
+  keyPrefix String
+
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdBy   User?     @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@index([organizationId, revokedAt])
+  @@map("api_key")
 }

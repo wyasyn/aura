@@ -18,6 +18,7 @@ import { toScanResultData } from "@/lib/scan/persist"
 import { saveScanResultSchema } from "@/lib/scan/schemas"
 import type { SkinAssessment } from "@/lib/scan/types"
 import { DEFAULT_MOCK_USAGE } from "@/lib/scans/constants"
+import { getTenantOrganizationIdSafe } from "@/lib/clinics/tenant"
 import { getScansRemaining, debitScanInTransaction } from "@/lib/scans/balance"
 import { estimateScanProviderCost } from "@/lib/scans/cost"
 import type { UsageInput } from "@/lib/scans/cost"
@@ -67,6 +68,9 @@ export async function saveScanResultAction(
 
   const costEstimate = await estimateScanProviderCost(usage)
 
+  // A scan taken on a clinic's subdomain belongs to that clinic.
+  const organizationId = await getTenantOrganizationIdSafe()
+
   const [profile, location] = await Promise.all([
     prisma.userProfile.findUnique({ where: { userId: session.user.id } }),
     prisma.userLocation.findUnique({ where: { userId: session.user.id } }),
@@ -78,6 +82,7 @@ export async function saveScanResultAction(
         const created = await tx.scan.create({
           data: {
             userId: session.user.id,
+            organizationId,
             status: "completed",
             imageRetained: false,
             profileSnapshot: profile

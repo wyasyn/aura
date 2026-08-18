@@ -1,13 +1,13 @@
 import { AURORA_STORE_ORIGIN } from "@/lib/products/constants"
 import type { WooCommerceProduct } from "@/lib/products/ingest/types"
 
-type WooCommerceConfig = {
+export type WooCommerceConfig = {
   storeUrl: string
   consumerKey: string
   consumerSecret: string
 }
 
-function getWooCommerceConfig(): WooCommerceConfig | null {
+export function getWooCommerceConfig(): WooCommerceConfig | null {
   const storeUrl = process.env.WOOCOMMERCE_STORE_URL?.trim() || AURORA_STORE_ORIGIN
   const consumerKey = process.env.WOOCOMMERCE_CONSUMER_KEY?.trim()
   const consumerSecret = process.env.WOOCOMMERCE_CONSUMER_SECRET?.trim()
@@ -19,7 +19,7 @@ function getWooCommerceConfig(): WooCommerceConfig | null {
   return { storeUrl, consumerKey, consumerSecret }
 }
 
-function buildAuthHeader(config: WooCommerceConfig): string {
+export function buildAuthHeader(config: WooCommerceConfig): string {
   const token = Buffer.from(
     `${config.consumerKey}:${config.consumerSecret}`,
   ).toString("base64")

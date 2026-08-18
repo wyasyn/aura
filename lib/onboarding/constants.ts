@@ -97,6 +97,6 @@ export function deriveAgeBand(dateOfBirth: Date): AgeBand {
 
 export function getFreeStarterScans(): number {
   const raw = process.env.FREE_STARTER_SCANS
-  const parsed = raw ? Number.parseInt(raw, 10) : 3
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 3
+  const parsed = raw ? Number.parseInt(raw, 10) : 1
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1
 }

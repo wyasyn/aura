@@ -1,6 +1,7 @@
 import type { PaymentProvider } from "@/generated/prisma/client"
 
 import { mockPaymentDriver } from "@/lib/payments/mock/driver"
+import { stripePaymentDriver } from "@/lib/payments/stripe/driver"
 import type { PaymentDriver } from "@/lib/payments/types"
 
 /**
@@ -12,9 +13,7 @@ export function getPaymentDriver(): PaymentDriver {
 
   switch (configured) {
     case "stripe":
-      throw new Error(
-        "PAYMENT_PROVIDER=stripe is not implemented yet, add lib/payments/stripe/driver.ts",
-      )
+      return stripePaymentDriver
     case "mock":
     case undefined:
     case "":

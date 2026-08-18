@@ -1,10 +1,12 @@
+import { siteUrl } from "@/lib/site"
+
 export const DISCLAIMER_VERSION = "1.1"
 
 export const CHAT_COSMETIC_DISCLAIMER =
   "Cosmetic guidance only — not medical advice."
 
-export const CONSULTATION_BOOKING_URL =
-  "https://calendly.com/auroraorganic4u"
+/** Points into the in-app expert marketplace rather than an external scheduler. */
+export const CONSULTATION_BOOKING_URL = `${siteUrl}/experts`
 
 export const SKIN_DISCLAIMER =
   "This report is for cosmetic and wellness guidance only. Results may vary with lighting, photo quality, and changes in your skin. It is not a medical diagnosis. For clinical concerns, seek advice from a licensed healthcare professional."

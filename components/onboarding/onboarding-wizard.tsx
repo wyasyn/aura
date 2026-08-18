@@ -98,7 +98,7 @@ export function OnboardingWizard({
   userName,
   callbackUrl = DEFAULT_POST_ONBOARDING_PATH,
   needsPassword = true,
-  freeScans = 3,
+  freeScans = 1,
 }: OnboardingWizardProps) {
   const router = useRouter()
   const { step, furthestStep, goToStep } = useOnboardingStepUrl(

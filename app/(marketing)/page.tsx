@@ -5,7 +5,7 @@ import { LandingPageContent } from "@/components/marketing/landing-page-content"
 export const metadata: Metadata = {
   title: "Understand your skin, discover your routine",
   description:
-    "One photo reads six dimensions of your skin in honest bands, not invented scores. Get an Ayurvedic skin lean, Aurora Organics matches filtered to your allergies and climate, and a report you keep. Three free scans, no card required.",
+    "One photo reads six dimensions of your skin in honest bands, not invented scores. Get an Ayurvedic skin lean, Aurora Organics matches filtered to your allergies and climate, and a report you keep. One free scan, no card required.",
   alternates: {
     canonical: "/",
   },

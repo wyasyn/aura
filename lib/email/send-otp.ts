@@ -1,5 +1,7 @@
 import { Resend } from "resend"
 
+import { getServableTenant } from "@/lib/clinics/tenant"
+
 import {
   buildOtpEmailHtml,
   buildOtpEmailText,
@@ -20,6 +22,17 @@ export async function sendOtpEmail({
   otp: string
   type: OtpType
 }): Promise<void> {
+  // A code requested from a clinic's site is sent in that clinic's name.
+  // Resolved defensively: a branding lookup failing must never stop someone
+  // receiving the code they need to sign in.
+  let brandName: string | undefined
+  try {
+    const tenant = await getServableTenant()
+    brandName = tenant?.branding.displayName
+  } catch (error) {
+    console.warn("[email] Could not resolve tenant branding for OTP", error)
+  }
+
   if (!resend) {
     console.info(`[dev] OTP for ${email} (${type}): ${otp}`)
     return
@@ -31,9 +44,9 @@ export async function sendOtpEmail({
   const { error } = await resend.emails.send({
     from,
     to: email,
-    subject: subjectForType(type),
-    text: buildOtpEmailText({ otp, type }),
-    html: buildOtpEmailHtml({ otp, type }),
+    subject: subjectForType(type, brandName),
+    text: buildOtpEmailText({ otp, type, brandName }),
+    html: buildOtpEmailHtml({ otp, type, brandName }),
   })
 
   if (error) {

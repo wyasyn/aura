@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache"
 
 import { revalidateScanHistoryContext } from "@/lib/ai/context/cache-tags"
 import { recordAiUsage } from "@/lib/ai/usage/record-usage"
+import { getTenantOrganizationIdSafe } from "@/lib/clinics/tenant"
 import type { ScanCaptureMode } from "@/generated/prisma/client"
 import { CONSENT_VERSION } from "@/lib/onboarding/constants"
 import { prisma } from "@/lib/db/client"
@@ -55,12 +56,16 @@ function scanDebitMetadata(
 
 export async function persistScanResult(input: PersistScanResultInput) {
   const resultData = toScanResultData(input.assessment)
+  // A scan taken on a clinic's subdomain belongs to that clinic; one taken on
+  // the platform host has no organization and stays purely the patient's.
+  const organizationId = await getTenantOrganizationIdSafe()
 
   return withDbRetry(() =>
     prisma.$transaction(async (tx) => {
       const created = await tx.scan.create({
         data: {
           userId: input.userId,
+          organizationId,
           status: "completed",
           captureMode: input.captureMode ?? "still",
           imageRetained: false,

@@ -1,11 +1,17 @@
 import { Suspense } from "react"
+import type { Metadata } from "next"
 
+import { tenantMetadata } from "@/lib/clinics/metadata"
 import { ReportsList } from "@/components/dashboard/reports-list"
 import { DashboardPageHeader } from "@/components/dashboard/page-header"
 import { ReportsListSkeleton } from "@/components/dashboard/skeletons/reports-list-skeleton"
 
 type ReportsPageProps = {
   searchParams: Promise<{ page?: string }>
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  return tenantMetadata("Your reports")
 }
 
 export default async function ReportsPage({ searchParams }: ReportsPageProps) {

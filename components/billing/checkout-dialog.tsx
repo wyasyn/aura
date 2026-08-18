@@ -10,11 +10,16 @@ import {
 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
+import { StripeCardForm } from "@/components/billing/stripe-card-form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ResponsiveDialog } from "@/components/ui/responsive-dialog"
-import { confirmPaymentAction, startCheckoutAction } from "@/lib/billing/actions"
+import {
+  confirmPaymentAction,
+  confirmStripePaymentAction,
+  startCheckoutAction,
+} from "@/lib/billing/actions"
 import { SCAN_TIER_LABELS, type ScanTier } from "@/lib/models/types"
 import { formatMoneyCents } from "@/lib/payments/format"
 import { TEST_CARDS, formatCardNumber } from "@/lib/payments/test-cards"
@@ -53,6 +58,7 @@ export function CheckoutDialog({
   const router = useRouter()
   const [step, setStep] = useState<Step>("review")
   const [paymentId, setPaymentId] = useState<string | null>(null)
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [card, setCard] = useState(EMPTY_CARD)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -78,6 +84,7 @@ export function CheckoutDialog({
       return
     }
     setPaymentId(result.paymentId)
+    setClientSecret(result.clientSecret ?? null)
     setStep("card")
   }
 
@@ -87,7 +94,21 @@ export function CheckoutDialog({
     setError(null)
     const result = await confirmPaymentAction({ paymentId, card })
     setPending(false)
+    handleConfirmResult(result)
+  }
 
+  async function onStripeSucceeded() {
+    if (!paymentId) return
+    setPending(true)
+    setError(null)
+    const result = await confirmStripePaymentAction({ paymentId })
+    setPending(false)
+    handleConfirmResult(result)
+  }
+
+  function handleConfirmResult(
+    result: Awaited<ReturnType<typeof confirmPaymentAction>>,
+  ) {
     if (!result.ok) {
       setError(result.error)
       router.refresh()
@@ -149,89 +170,116 @@ export function CheckoutDialog({
 
         {step === "card" ? (
           <>
-            {isSimulated ? <TestCardHint /> : null}
+            {isSimulated ? (
+              <>
+                <TestCardHint />
 
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="checkout-card-name">Name on card</Label>
-                <Input
-                  id="checkout-card-name"
-                  className="mt-1.5"
-                  autoComplete="cc-name"
-                  value={card.name}
-                  onChange={(event) =>
-                    setCard((c) => ({ ...c, name: event.target.value }))
-                  }
-                />
-              </div>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="checkout-card-name">Name on card</Label>
+                    <Input
+                      id="checkout-card-name"
+                      className="mt-1.5"
+                      autoComplete="cc-name"
+                      value={card.name}
+                      onChange={(event) =>
+                        setCard((c) => ({ ...c, name: event.target.value }))
+                      }
+                    />
+                  </div>
 
-              <div>
-                <Label htmlFor="checkout-card-number">Card number</Label>
-                <Input
-                  id="checkout-card-number"
-                  className="mt-1.5 tabular-nums"
-                  inputMode="numeric"
-                  autoComplete="cc-number"
-                  placeholder="4242 4242 4242 4242"
-                  value={formatCardNumber(card.number)}
-                  onChange={(event) =>
-                    setCard((c) => ({ ...c, number: event.target.value }))
-                  }
-                />
-              </div>
+                  <div>
+                    <Label htmlFor="checkout-card-number">Card number</Label>
+                    <Input
+                      id="checkout-card-number"
+                      className="mt-1.5 tabular-nums"
+                      inputMode="numeric"
+                      autoComplete="cc-number"
+                      placeholder="4242 4242 4242 4242"
+                      value={formatCardNumber(card.number)}
+                      onChange={(event) =>
+                        setCard((c) => ({ ...c, number: event.target.value }))
+                      }
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="checkout-card-expiry">Expiry</Label>
-                  <Input
-                    id="checkout-card-expiry"
-                    className="mt-1.5 tabular-nums"
-                    inputMode="numeric"
-                    autoComplete="cc-exp"
-                    placeholder="MM/YY"
-                    maxLength={5}
-                    value={card.expiry}
-                    onChange={(event) =>
-                      setCard((c) => ({
-                        ...c,
-                        expiry: formatExpiry(event.target.value),
-                      }))
-                    }
-                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="checkout-card-expiry">Expiry</Label>
+                      <Input
+                        id="checkout-card-expiry"
+                        className="mt-1.5 tabular-nums"
+                        inputMode="numeric"
+                        autoComplete="cc-exp"
+                        placeholder="MM/YY"
+                        maxLength={5}
+                        value={card.expiry}
+                        onChange={(event) =>
+                          setCard((c) => ({
+                            ...c,
+                            expiry: formatExpiry(event.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="checkout-card-cvc">CVC</Label>
+                      <Input
+                        id="checkout-card-cvc"
+                        className="mt-1.5 tabular-nums"
+                        inputMode="numeric"
+                        autoComplete="cc-csc"
+                        placeholder="123"
+                        maxLength={4}
+                        value={card.cvc}
+                        onChange={(event) =>
+                          setCard((c) => ({
+                            ...c,
+                            cvc: event.target.value.replace(/\D/g, ""),
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="checkout-card-cvc">CVC</Label>
-                  <Input
-                    id="checkout-card-cvc"
-                    className="mt-1.5 tabular-nums"
-                    inputMode="numeric"
-                    autoComplete="cc-csc"
-                    placeholder="123"
-                    maxLength={4}
-                    value={card.cvc}
-                    onChange={(event) =>
-                      setCard((c) => ({
-                        ...c,
-                        cvc: event.target.value.replace(/\D/g, ""),
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
 
-            {needsVerification ? (
-              <Notice tone="warning">
-                Extra verification requested. Confirm once more to complete the
-                payment.
+                {needsVerification ? (
+                  <Notice tone="warning">
+                    Extra verification requested. Confirm once more to complete
+                    the payment.
+                  </Notice>
+                ) : null}
+                {error ? <Notice tone="error">{error}</Notice> : null}
+
+                <Button onClick={onPay} disabled={pending} className="w-full">
+                  <IconLock className="size-4" />
+                  {pending ? "Processing..." : `Pay ${price}`}
+                </Button>
+              </>
+            ) : clientSecret ? (
+              <>
+                <StripeCardForm
+                  clientSecret={clientSecret}
+                  amountLabel={price}
+                  onSucceeded={onStripeSucceeded}
+                  onError={(message) => {
+                    setError(message)
+                    router.refresh()
+                  }}
+                />
+                {needsVerification ? (
+                  <Notice tone="warning">
+                    Extra verification requested. Confirm once more to complete
+                    the payment.
+                  </Notice>
+                ) : null}
+                {error ? <Notice tone="error">{error}</Notice> : null}
+              </>
+            ) : (
+              <Notice tone="error">
+                Payment could not be started. Close this dialog and try again.
               </Notice>
-            ) : null}
-            {error ? <Notice tone="error">{error}</Notice> : null}
-
-            <Button onClick={onPay} disabled={pending} className="w-full">
-              <IconLock className="size-4" />
-              {pending ? "Processing..." : `Pay ${price}`}
-            </Button>
+            )}
 
             <p className="text-center text-xs text-muted-foreground">
               Card details are never stored. Only the brand and last four digits

@@ -1,7 +1,7 @@
 type OtpType = "sign-in" | "email-verification" | "forget-password" | "change-email"
 
 const EXPIRES_MINUTES = 10
-const BRAND_NAME = "Aurora Organics"
+const DEFAULT_BRAND_NAME = "Aurora Organics"
 
 function introForType(type: OtpType): string {
   switch (type) {
@@ -16,7 +16,7 @@ function introForType(type: OtpType): string {
   }
 }
 
-function subjectForType(type: OtpType): string {
+function subjectForType(type: OtpType, BRAND_NAME = DEFAULT_BRAND_NAME): string {
   switch (type) {
     case "sign-in":
       return `Your ${BRAND_NAME} sign-in code`
@@ -35,10 +35,13 @@ export function buildOtpEmailText({
   otp,
   type,
   expiresMinutes = EXPIRES_MINUTES,
+  brandName: BRAND_NAME = DEFAULT_BRAND_NAME,
 }: {
   otp: string
   type: OtpType
   expiresMinutes?: number
+  /** The clinic whose site requested the code, when there is one. */
+  brandName?: string
 }): string {
   const intro = introForType(type)
 
@@ -49,13 +52,15 @@ export function buildOtpEmailHtml({
   otp,
   type,
   expiresMinutes = EXPIRES_MINUTES,
+  brandName: BRAND_NAME = DEFAULT_BRAND_NAME,
 }: {
   otp: string
   type: OtpType
   expiresMinutes?: number
+  brandName?: string
 }): string {
   const intro = introForType(type)
-  const subject = subjectForType(type)
+  const subject = subjectForType(type, BRAND_NAME)
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -72,7 +77,7 @@ export function buildOtpEmailHtml({
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background-color:#ffffff;border:1px solid #e8e4df;border-radius:16px;overflow:hidden;">
           <tr>
             <td style="padding:28px 32px 20px;text-align:center;border-bottom:1px solid #f0ece7;">
-              <p style="margin:0;font-family:Roboto,Segoe UI,sans-serif;font-size:20px;font-weight:500;letter-spacing:0.04em;color:#a67c52;">Aurora Organics</p>
+              <p style="margin:0;font-family:Roboto,Segoe UI,sans-serif;font-size:20px;font-weight:500;letter-spacing:0.04em;color:#a67c52;">${BRAND_NAME}</p>
               <p style="margin:8px 0 0;font-size:13px;color:#7a7268;">Thoughtful skincare, made personal</p>
             </td>
           </tr>

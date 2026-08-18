@@ -40,13 +40,18 @@ type SkinReportDocumentProps = {
   logoSrc?: string
   captureMode?: string
   productImageDataUris?: Map<string, string>
+  /**
+   * The clinic this report belongs to, or Aurora when the scan was not taken
+   * through a white-label tenant.
+   */
+  brandName?: string
 }
 
-function ReportPageFooter() {
+function ReportPageFooter({ brandName }: { brandName: string }) {
   return (
     <View style={reportStyles.pageFooter} fixed>
       <Text style={reportStyles.pageFooterText}>
-        Aurora Organics · Skin Intelligence Report
+        {brandName} · Skin Intelligence Report
       </Text>
       <Text
         style={reportStyles.pageFooterText}
@@ -63,11 +68,13 @@ function ReportDocumentHeader({
   scanDate,
   userName,
   captureMode,
+  brandName,
 }: {
   logoSrc?: string
   scanDate?: string
   userName?: string
   captureMode?: string
+  brandName: string
 }) {
   const metaLines = [
     scanDate,
@@ -82,7 +89,7 @@ function ReportDocumentHeader({
       <View style={reportStyles.headerLeft}>
         {logoSrc ? <Image src={logoSrc} style={reportStyles.logo} /> : null}
         <View>
-          <Text style={reportStyles.brandName}>Aurora Organics</Text>
+          <Text style={reportStyles.brandName}>{brandName}</Text>
           <Text style={reportStyles.brandTagline}>Skin Intelligence Report</Text>
         </View>
       </View>
@@ -218,6 +225,7 @@ export function SkinReportDocument({
   logoSrc,
   captureMode,
   productImageDataUris,
+  brandName = "Aurora Organics",
 }: SkinReportDocumentProps) {
   const locationLabel = climateContext
     ? formatLocationLabel(climateContext)
@@ -228,7 +236,7 @@ export function SkinReportDocument({
     climateContext?.temperatureBand != null
 
   return (
-    <Document title="Aurora Organics Skin Report">
+    <Document title={`${brandName} Skin Report`}>
       {/*
         One flowing page rather than a page per topic. The old layout pinned
         each block to a fixed sheet, which left pages two and three around half
@@ -236,13 +244,14 @@ export function SkinReportDocument({
         silently truncated instead of continuing overleaf.
       */}
       <Page size="A4" style={reportStyles.page}>
-        <ReportPageFooter />
+        <ReportPageFooter brandName={brandName} />
 
         <ReportDocumentHeader
           logoSrc={logoSrc}
           scanDate={scanDate}
           userName={userName}
           captureMode={captureMode}
+          brandName={brandName}
         />
 
         <ReportSection title={REPORT_SECTION_TITLES.snapshot} first>
@@ -382,7 +391,7 @@ export function SkinReportDocument({
                     <Text style={reportStyles.rowNote}>{item.reason}</Text>
                     {item.storeUrl ? (
                       <Link src={item.storeUrl} style={reportStyles.productLink}>
-                        View on Aurora Organics
+                        View product
                       </Link>
                     ) : null}
                   </View>

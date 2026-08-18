@@ -38,3 +38,7 @@ export const confirmPaymentSchema = z.object({
   paymentId: z.string().trim().min(1),
   card: cardSchema,
 })
+
+export const confirmStripePaymentSchema = z.object({
+  paymentId: z.string().trim().min(1),
+})

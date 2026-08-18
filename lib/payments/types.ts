@@ -22,7 +22,12 @@ export type ConfirmIntentInput = {
   ref: string
   amountCents: number
   currency: string
-  card: CardInput
+  /**
+   * Raw card fields, only used by drivers that take card data directly
+   * (the mock driver). Real gateways confirm client-side via their own SDK
+   * and this driver step just re-reads the authoritative status by `ref`.
+   */
+  card?: CardInput
   /**
    * Status stored on the Payment row before this attempt. Lets a driver resolve
    * a multi-step flow without keeping in-process state.
@@ -42,6 +47,11 @@ export type PaymentIntent = {
   failureReason?: string
   /** Set when the provider needs the user redirected (3DS, mobile money prompt). */
   redirectUrl?: string
+  /**
+   * Client secret for gateways that confirm the payment in the browser
+   * (Stripe Elements). Never set by drivers that confirm server-side.
+   */
+  clientSecret?: string
 }
 
 export interface PaymentDriver {
