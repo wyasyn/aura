@@ -102,6 +102,23 @@ function rootDomain(): string | null {
 }
 
 /**
+ * Exposed so custom-domain validation can refuse the platform's own hosts.
+ * Read at call time, like rootDomain above, rather than captured at import —
+ * a value frozen at module load is invisible to tests and to any environment
+ * that populates configuration after the module graph is built.
+ */
+export function platformRootDomain(): string | null {
+  return rootDomain()
+}
+
+/** Strips protocol, path and port from a Host header or pasted URL. */
+export function normalizeHostname(host: string | null | undefined): string | null {
+  if (!host) return null
+  const normalized = normalizeHost(host)
+  return normalized || null
+}
+
+/**
  * Extracts the clinic subdomain from a Host header, or null when the request
  * is for the platform itself.
  *

@@ -9,9 +9,13 @@ import { getBrandLogoDataUri } from "@/lib/pdf/brand-logo"
 import { resolveProductImageDataUris } from "@/lib/pdf/product-images"
 import { SkinReportDocument } from "@/lib/pdf/skin-report-document"
 import { fromScanResult } from "@/lib/scan/persist"
+import { MAX_LOGO_BYTES } from "@/lib/clinics/schemas"
 
-/** Cap so a mis-typed logo URL can't stream an arbitrarily large file into a PDF. */
-const MAX_LOGO_BYTES = 512 * 1024
+/**
+ * Stops a mis-typed logo URL streaming an arbitrarily large file into a PDF.
+ * Held at the upload cap so a logo accepted in settings is never dropped here.
+ */
+const MAX_REMOTE_LOGO_BYTES = MAX_LOGO_BYTES
 const LOGO_FETCH_TIMEOUT_MS = 4000
 
 /**
@@ -22,7 +26,14 @@ const LOGO_FETCH_TIMEOUT_MS = 4000
 async function fetchRemoteLogoDataUri(
   url: string | null,
 ): Promise<string | undefined> {
-  if (!url || !/^https:\/\//i.test(url)) return undefined
+  if (!url) return undefined
+
+  // An uploaded logo is already an inline data URI — @react-pdf renders it as
+  // is, and there is nothing to fetch. Without this it would fall through the
+  // https check below and silently vanish from every branded report.
+  if (url.startsWith("data:image/")) return url
+
+  if (!/^https:\/\//i.test(url)) return undefined
 
   try {
     const response = await fetch(url, {
@@ -34,7 +45,7 @@ async function fetchRemoteLogoDataUri(
     if (!contentType.startsWith("image/")) return undefined
 
     const buffer = Buffer.from(await response.arrayBuffer())
-    if (buffer.byteLength > MAX_LOGO_BYTES) return undefined
+    if (buffer.byteLength > MAX_REMOTE_LOGO_BYTES) return undefined
 
     return `data:${contentType};base64,${buffer.toString("base64")}`
   } catch (error) {

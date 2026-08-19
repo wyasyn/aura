@@ -189,23 +189,54 @@ function SidebarUserFooter({
   )
 }
 
+/**
+ * Attribution on a white-labelled site. Deliberately quiet and only shown to a
+ * clinic's own users — on the platform host the whole product is already
+ * Aurora, so repeating it would be noise. Hidden when the sidebar is collapsed
+ * to icons, where there is no room for it to read as anything but clutter.
+ */
+function PoweredByAurora() {
+  const { state } = useSidebar()
+  if (state === "collapsed") return null
+
+  return (
+    <div className="flex items-center justify-center gap-1.5 border-t border-sidebar-border px-2 py-2">
+      <Image
+        src={brandIcon}
+        alt=""
+        width={14}
+        height={14}
+        className="size-3.5 shrink-0 object-contain opacity-60"
+        style={{ width: "auto", height: "auto" }}
+      />
+      <span className="text-sidebar-foreground/60 text-[11px]">
+        Powered by Aurora
+      </span>
+    </div>
+  )
+}
+
 export function DashboardSidebar({
   role,
   userName,
   userEmail,
   userImage,
   emailVerified,
+  brand,
 }: {
   role: AppRole
   userName: string
   userEmail: string
   userImage: string | null
   emailVerified: boolean
+  /** The clinic whose site this is, or undefined on the platform host. */
+  brand?: { name: string; logoUrl: string | null }
 }) {
   const pathname = usePathname()
   const { state, isMobile, setOpenMobile, toggleSidebar } = useSidebar()
   const collapsed = state === "collapsed"
   const sections = getNavSections(role)
+  const brandName = brand?.name ?? "Aurora Organics"
 
   useEffect(() => {
     if (isMobile) {
@@ -221,7 +252,7 @@ export function DashboardSidebar({
             <SidebarMenuButton
               size="lg"
               asChild
-              tooltip={collapsed ? "Expand sidebar" : "Aurora Organics"}
+              tooltip={collapsed ? "Expand sidebar" : brandName}
             >
               <Link
                 href="/dashboard"
@@ -238,17 +269,27 @@ export function DashboardSidebar({
                 }}
               >
                 <span className="flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg">
-                  <Image
-                    src={brandIcon}
-                    alt=""
-                    width={32}
-                    height={32}
-                    className="size-7 object-contain group-data-[collapsible=icon]:size-4"
-                    style={{ width: "auto", height: "auto" }}
-                  />
+                  {brand?.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- an uploaded
+                    // logo is an inline data URI, which next/image cannot optimise.
+                    <img
+                      src={brand.logoUrl}
+                      alt=""
+                      className="size-7 object-contain group-data-[collapsible=icon]:size-4"
+                    />
+                  ) : (
+                    <Image
+                      src={brandIcon}
+                      alt=""
+                      width={32}
+                      height={32}
+                      className="size-7 object-contain group-data-[collapsible=icon]:size-4"
+                      style={{ width: "auto", height: "auto" }}
+                    />
+                  )}
                 </span>
                 <span className="font-heading truncate text-sm font-medium tracking-wide">
-                  Aurora Organics
+                  {brandName}
                 </span>
               </Link>
             </SidebarMenuButton>
@@ -286,6 +327,7 @@ export function DashboardSidebar({
         userImage={userImage}
         emailVerified={emailVerified}
       />
+      {brand ? <PoweredByAurora /> : null}
       <SidebarRail />
     </Sidebar>
   )

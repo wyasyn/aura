@@ -4,6 +4,7 @@ import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { EntitlementProvider } from "@/components/billing/entitlement-provider"
 import { DashboardShell } from "@/components/layouts/dashboard-shell"
 import { scheduleAiScanContextWarmup } from "@/lib/ai/context/warm"
+import { resolveTenant } from "@/lib/clinics/tenant"
 import { getScanEntitlement } from "@/lib/scans/entitlement"
 import {
   AuthShellGate,
@@ -35,6 +36,17 @@ async function DashboardAuthShellInner({
   scheduleAiScanContextWarmup(ctx.userId)
   const entitlement = await getScanEntitlement(ctx.userId)
 
+  // On a clinic's subdomain the whole dashboard carries that clinic's name and
+  // logo, not Aurora's — including for its patients, not just its staff.
+  const tenant = await resolveTenant()
+  const brand =
+    tenant.kind === "tenant"
+      ? {
+          name: tenant.tenant.branding.displayName,
+          logoUrl: tenant.tenant.branding.logoUrl,
+        }
+      : undefined
+
   const isImpersonating = Boolean(
     ctx.session.session &&
       "impersonatedBy" in ctx.session.session &&
@@ -50,6 +62,7 @@ async function DashboardAuthShellInner({
         userEmail={ctx.user.email}
         userImage={ctx.user.image ?? null}
         emailVerified={ctx.user.emailVerified}
+        brand={brand}
       >
         {children}
       </DashboardShell>

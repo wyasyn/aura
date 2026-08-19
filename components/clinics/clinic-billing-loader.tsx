@@ -12,7 +12,11 @@ export async function ClinicBillingLoader() {
     listPurchasableClinicPlans(),
     prisma.clinicSettings.findUniqueOrThrow({
       where: { id: tenant.clinicId },
-      select: { stripeCustomerId: true, cancelAtPeriodEnd: true },
+      select: {
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        cancelAtPeriodEnd: true,
+      },
     }),
   ])
 
@@ -39,7 +43,11 @@ export async function ClinicBillingLoader() {
         interval: plan.interval,
         seatLimit: plan.seatLimit,
         monthlyScanQuota: plan.monthlyScanQuota,
-        isCurrent: plan.id === tenant.plan?.id,
+        // "Current" means actively subscribed to it, not merely assigned it.
+        // A plan an admin attached without a Stripe subscription must still be
+        // purchasable, or a clinic provisioned that way can never start paying.
+        isCurrent:
+          plan.id === tenant.plan?.id && Boolean(clinic.stripeSubscriptionId),
       }))}
     />
   )

@@ -21,6 +21,7 @@ import {
   IconUser,
   IconUserCheck,
   IconUsers,
+  IconWorld,
 } from "@tabler/icons-react"
 
 export type AppRole = "user" | "admin" | "expert" | "company_admin" | "affiliate"
@@ -95,6 +96,7 @@ const CLINIC: NavSection = {
     { href: "/clinic/analytics", label: "Analytics", icon: IconChartBar },
     { href: "/clinic/team", label: "Team", icon: IconUserCheck },
     { href: "/clinic/branding", label: "Branding", icon: IconPalette },
+    { href: "/clinic/domain", label: "Domain", icon: IconWorld },
     { href: "/clinic/billing", label: "Billing", icon: IconCreditCard },
     { href: "/clinic/api", label: "API", icon: IconPlug },
   ],

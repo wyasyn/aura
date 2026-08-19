@@ -1,7 +1,7 @@
 import { cache } from "react"
 import { headers } from "next/headers"
 
-import { extractSubdomain } from "@/lib/clinics/subdomain"
+import { extractSubdomain, normalizeHostname } from "@/lib/clinics/subdomain"
 import {
   resolveClinicAccess,
   resolveScanQuota,
@@ -31,6 +31,8 @@ export type TenantContext = {
   organizationId: string
   organizationName: string
   subdomain: string
+  /** Verified domain the clinic is also served on, if any. */
+  customDomain: string | null
   branding: TenantBranding
   access: ClinicAccess
   quota: QuotaState
@@ -61,8 +63,20 @@ export const getTenantSubdomain = cache(async (): Promise<string | null> => {
 
 /** Single per-request tenant loader. Read-only, so it is safe in render paths. */
 export const resolveTenant = cache(async (): Promise<TenantResolveResult> => {
+  const headerList = await headers()
+  const host = normalizeHostname(headerList.get("host"))
   const subdomain = await getTenantSubdomain()
-  if (!subdomain) {
+
+  // A clinic may be reached on its own domain or on its subdomain. Only a
+  // verified domain resolves, so a half-configured one falls through to the
+  // subdomain rather than serving nothing.
+  const where = subdomain
+    ? { subdomain }
+    : host
+      ? { customDomain: host }
+      : null
+
+  if (!where) {
     return { kind: "platform" }
   }
 
@@ -70,7 +84,7 @@ export const resolveTenant = cache(async (): Promise<TenantResolveResult> => {
   try {
     clinic = await withDbRetry(() =>
       prisma.clinicSettings.findUnique({
-        where: { subdomain },
+        where,
         include: {
           organization: { select: { name: true } },
           plan: {
@@ -93,7 +107,14 @@ export const resolveTenant = cache(async (): Promise<TenantResolveResult> => {
   }
 
   if (!clinic) {
-    return { kind: "unknown_subdomain", subdomain }
+    // Reached on a host that is neither a known subdomain nor a known domain.
+    return { kind: "unknown_subdomain", subdomain: subdomain ?? host ?? "" }
+  }
+
+  // Matched by domain, but that domain has not been proven yet. Treat it as
+  // unknown rather than serving the clinic on a host it may not control.
+  if (!subdomain && !clinic.customDomainVerifiedAt) {
+    return { kind: "unknown_subdomain", subdomain: host ?? "" }
   }
 
   return {
@@ -103,6 +124,7 @@ export const resolveTenant = cache(async (): Promise<TenantResolveResult> => {
       organizationId: clinic.organizationId,
       organizationName: clinic.organization.name,
       subdomain: clinic.subdomain,
+      customDomain: clinic.customDomainVerifiedAt ? clinic.customDomain : null,
       branding: {
         displayName: clinic.displayName,
         logoUrl: clinic.logoUrl,
@@ -135,6 +157,19 @@ export const getServableTenant = cache(async (): Promise<TenantContext | null> =
   if (result.kind !== "tenant") return null
   return result.tenant.access.ok ? result.tenant : null
 })
+
+/**
+ * The clinic owning this host, regardless of whether its subscription entitles
+ * it to serve patients.
+ *
+ * Used by the login gate, which must keep working for a lapsed clinic: its
+ * staff still need to sign in to fix billing, so entitlement is checked later,
+ * per route, not at the door.
+ */
+export async function getTenantSubdomainOrganizationId(): Promise<string | null> {
+  const result = await resolveTenant()
+  return result.kind === "tenant" ? result.tenant.organizationId : null
+}
 
 /** The organization id to stamp on records created during this request. */
 export async function getTenantOrganizationId(): Promise<string | null> {

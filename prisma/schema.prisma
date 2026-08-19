@@ -49,6 +49,7 @@ model User {
   affiliateApplicationsReviewed AffiliateProfile[] @relation("AffiliateReviewedBy")
   affiliatePayoutsRecorded      AffiliatePayout[]  @relation("AffiliatePayoutCreatedBy")
   apiKeysCreated                ApiKey[]           @relation("ApiKeyCreatedBy")
+  clinicPatient                 ClinicPatient?
 
   @@unique([email])
   @@map("user")
@@ -121,6 +122,7 @@ model Organization {
   // better-auth's organization plugin expects it.
   clinic      ClinicSettings?
   apiKeys     ApiKey[]
+  patients    ClinicPatient[]
 
   @@map("organization")
 }
@@ -997,8 +999,33 @@ model ClinicSettings {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // A domain the clinic owns and manages at its own registrar, e.g.
+  // skin.theirclinic.com. Only served once verified; the subdomain keeps
+  // working either way, so a misconfigured domain never takes a clinic offline.
+  customDomain           String?   @unique
+  customDomainToken      String?
+  customDomainVerifiedAt DateTime?
+
   @@index([status])
   @@map("clinic_settings")
+}
+
+// Ties a patient to the clinic whose site they belong to.
+//
+// Separate from Member, which is staff: mixing the two would put every patient
+// into the clinic's team list and its seat count. A user has at most one of
+// these, so a patient belongs to exactly one clinic and is refused everywhere
+// else, including the platform host.
+model ClinicPatient {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@map("clinic_patient")
 }
 
 // A partner integration credential, scoped to one tenant.

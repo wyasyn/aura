@@ -12,7 +12,7 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getActiveNavItem, type AppRole } from "@/lib/dashboard/nav"
 
-function MobileHeader({ role }: { role: AppRole }) {
+function MobileHeader({ role, brandName }: { role: AppRole; brandName: string }) {
   const pathname = usePathname()
   const activeItem = getActiveNavItem(pathname, role)
 
@@ -28,7 +28,7 @@ function MobileHeader({ role }: { role: AppRole }) {
     )
   }
 
-  return <span className="font-heading text-sm font-medium">Aurora Organics</span>
+  return <span className="font-heading text-sm font-medium">{brandName}</span>
 }
 
 export function DashboardShell({
@@ -38,6 +38,7 @@ export function DashboardShell({
   userEmail,
   userImage,
   emailVerified,
+  brand,
 }: {
   children: React.ReactNode
   role: AppRole
@@ -45,6 +46,8 @@ export function DashboardShell({
   userEmail: string
   userImage: string | null
   emailVerified: boolean
+  /** The clinic whose site this is, or undefined on the platform host. */
+  brand?: { name: string; logoUrl: string | null }
 }) {
   return (
     <TooltipProvider delayDuration={0}>
@@ -55,11 +58,12 @@ export function DashboardShell({
         userEmail={userEmail}
         userImage={userImage}
         emailVerified={emailVerified}
+        brand={brand}
       />
       <SidebarInset className="min-h-0 overflow-y-auto">
         <header className="sticky top-0 z-20 flex h-12 items-center gap-2 border-b border-border bg-background/90 px-4 backdrop-blur-sm md:hidden">
           <SidebarTrigger />
-          <MobileHeader role={role} />
+          <MobileHeader role={role} brandName={brand?.name ?? "Aurora Organics"} />
         </header>
         <DashboardContent>{children}</DashboardContent>
       </SidebarInset>

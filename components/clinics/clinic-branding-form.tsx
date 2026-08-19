@@ -9,6 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { updateClinicBrandingAction } from "@/lib/clinics/branding-actions"
 import { contrastingForeground, normalizeHexColor } from "@/lib/clinics/branding"
+import {
+  ALLOWED_LOGO_MIME_TYPES,
+  MAX_LOGO_BYTES,
+  MAX_LOGO_LABEL,
+} from "@/lib/clinics/schemas"
 
 export type BrandingFormValues = {
   displayName: string
@@ -28,6 +33,42 @@ export function ClinicBrandingForm({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [values, setValues] = useState(initial)
+  const [reading, setReading] = useState(false)
+
+  /**
+   * Reads the chosen file into a data URI. Size and type are checked here for a
+   * quick answer, and again on the server, which is what actually enforces them
+   * — this input can be bypassed.
+   */
+  function onLogoChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!ALLOWED_LOGO_MIME_TYPES.includes(file.type as (typeof ALLOWED_LOGO_MIME_TYPES)[number])) {
+      toast.error("Choose a PNG, JPG, WebP or SVG image.")
+      event.target.value = ""
+      return
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      toast.error(`That image is ${Math.round(file.size / 1024)}KB. The limit is ${MAX_LOGO_LABEL}.`)
+      event.target.value = ""
+      return
+    }
+
+    setReading(true)
+    const reader = new FileReader()
+    reader.onload = () => {
+      setReading(false)
+      if (typeof reader.result === "string") {
+        set("logoUrl", reader.result)
+      }
+    }
+    reader.onerror = () => {
+      setReading(false)
+      toast.error("Could not read that file.")
+    }
+    reader.readAsDataURL(file)
+  }
 
   function set<K extends keyof BrandingFormValues>(
     key: K,
@@ -90,16 +131,48 @@ export function ClinicBrandingForm({
         </div>
 
         <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="brand-logo">Logo URL</Label>
-          <Input
-            id="brand-logo"
-            value={values.logoUrl}
-            onChange={(e) => set("logoUrl", e.target.value)}
-            disabled={!canEdit}
-            placeholder="https://yourclinic.com/logo.png"
-          />
+          <Label htmlFor="brand-logo">Logo</Label>
+
+          <div className="flex flex-wrap items-center gap-4">
+            {values.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- a data URI has no
+              // remote host for next/image to optimise, and the size is already capped.
+              <img
+                src={values.logoUrl}
+                alt="Your clinic logo"
+                className="size-16 rounded-lg border border-border/60 bg-white object-contain p-1"
+              />
+            ) : (
+              <div className="text-muted-foreground flex size-16 items-center justify-center rounded-lg border border-dashed border-border/60 text-xs">
+                None
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Input
+                id="brand-logo"
+                type="file"
+                accept={ALLOWED_LOGO_MIME_TYPES.join(",")}
+                disabled={!canEdit || reading}
+                onChange={onLogoChange}
+                className="max-w-xs"
+              />
+              {values.logoUrl && canEdit ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => set("logoUrl", "")}
+                >
+                  Remove logo
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
           <p className="text-muted-foreground text-xs">
-            Must be an https URL. Replaces your name in the header when set.
+            PNG, JPG, WebP or SVG, up to {MAX_LOGO_LABEL}.
+            Shown instead of your clinic name in the sidebar and on reports.
           </p>
         </div>
 
