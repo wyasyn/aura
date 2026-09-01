@@ -1,9 +1,9 @@
-import { MarketingShell } from "@/components/layouts/marketing-shell"
+import { MarketingLayoutClient } from "@/components/layouts/marketing-layout-client"
 
 export default function MarketingLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  return <MarketingShell>{children}</MarketingShell>
+  return <MarketingLayoutClient>{children}</MarketingLayoutClient>
 }

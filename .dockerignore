@@ -1,12 +1,29 @@
+# Reinstalled inside the image, and a host build of node_modules would carry
+# the wrong platform binaries for alpine.
 node_modules
 .next
 out
+coverage
+
 .git
 .gitignore
+.github
+
+# Never bake configuration into an image. Every value arrives at runtime.
 .env*
+
+# Design source, not shipped. Absent from the repo today; listed so adding it
+# later does not silently enlarge the build context.
+brand
+
 *.md
 .DS_Store
 npm-debug.log*
-coverage
-.cursor
 *.tsbuildinfo
+.cursor
+.vscode
+.claude
+.agents
+
+# Local scratch that should never reach a build context.
+tmp-*

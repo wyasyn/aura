@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/process-product-jobs",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/sync-products",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/purge-retention",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

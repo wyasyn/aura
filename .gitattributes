@@ -1,0 +1,27 @@
+# Line endings are decided here rather than by each machine's git config.
+#
+# Without this the repository has no opinion, so `core.autocrlf` decides — and a
+# Windows checkout then reports all 639 tracked files as modified, with equal
+# insertions and deletions and no actual change. A diff that size buries real
+# work and makes review impossible.
+#
+# LF in the repository, whatever the working tree uses locally.
+* text=auto eol=lf
+
+# Binary. Never converted, never diffed as text.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.ico    binary
+*.pdf    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
+*.node   binary
+
+# Generated. Collapsed in diffs and excluded from language statistics.
+package-lock.json  linguist-generated=true -diff
+generated/**       linguist-generated=true -diff

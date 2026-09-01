@@ -126,6 +126,57 @@
     }
   html {
     @apply font-sans;
+    /* Keeps anchor targets clear of the fixed marketing navbar. */
+    scroll-padding-top: 5rem;
+    }
+
+  /* Brand-tinted scrollbar. The thumb is warmed toward --primary rather than
+     left neutral, so scroll chrome reads as part of the product. Firefox gets
+     the two-value shorthand; Chromium/WebKit get the floating-pill treatment
+     via a background-colored border. */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--primary) 45%, var(--muted-foreground))
+      transparent;
+    }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+    }
+
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--primary) 45%, var(--muted-foreground));
+    border: 2px solid var(--background);
+    border-radius: 9999px;
+    }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--primary) 70%, var(--muted-foreground));
+    }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+    }
+
+  /* On the dark palette a 45% primary mix sits too close to the background,
+     so lean further into the primary hue for contrast. */
+  .dark html,
+  .dark {
+    scrollbar-color: color-mix(in oklch, var(--primary) 62%, var(--muted-foreground))
+      transparent;
+    }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--primary) 62%, var(--muted-foreground));
+    }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--primary) 85%, var(--muted-foreground));
     }
   h1,
   h2,
@@ -133,6 +184,175 @@
   h4,
   h5,
   h6 {
-    @apply font-heading;
+    @apply font-heading tracking-tight;
     }
+}
+
+@layer utilities {
+  .dot-field {
+    --dot-color: color-mix(in oklab, var(--foreground) 16%, transparent);
+    --dot-size: 22px;
+    background-image: radial-gradient(
+      circle,
+      var(--dot-color) 1px,
+      transparent 1px
+    );
+    background-size: var(--dot-size) var(--dot-size);
+  }
+
+  .dark .dot-field {
+    --dot-color: color-mix(in oklab, var(--foreground) 10%, transparent);
+  }
+
+  /* Elevated card surface used across the scan flow. Soft vertical gradient,
+     inset top highlight, and a wide diffuse drop shadow. */
+  .scan-surface {
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--card) 96%, transparent) 0%,
+      color-mix(in oklab, var(--background) 92%, transparent) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in oklab, var(--background) 80%, white 20%),
+      0 1px 2px 0 color-mix(in oklab, var(--foreground) 6%, transparent),
+      0 24px 60px -36px color-mix(in oklab, var(--foreground) 45%, transparent);
+  }
+
+  .dark .scan-surface {
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--card) 88%, transparent) 0%,
+      color-mix(in oklab, var(--background) 94%, transparent) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in oklab, var(--foreground) 10%, transparent),
+      0 24px 70px -40px oklch(0 0 0 / 0.8);
+  }
+
+  /* Lighter sibling of .scan-surface for dashboard panels. Same design DNA at
+     roughly half the elevation, so the scan flow stays the visual peak. */
+  .surface-panel {
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--card) 98%, transparent) 0%,
+      color-mix(in oklab, var(--background) 96%, transparent) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in oklab, var(--background) 85%, white 15%),
+      0 1px 2px 0 color-mix(in oklab, var(--foreground) 4%, transparent),
+      0 12px 32px -24px color-mix(in oklab, var(--foreground) 35%, transparent);
+  }
+
+  .dark .surface-panel {
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--card) 92%, transparent) 0%,
+      color-mix(in oklab, var(--background) 96%, transparent) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in oklab, var(--foreground) 7%, transparent),
+      0 12px 40px -28px oklch(0 0 0 / 0.7);
+  }
+
+  /* Warm radial glow placed behind the active scan card. */
+  .scan-halo::before {
+    content: "";
+    position: absolute;
+    inset: -22% -10% auto -10%;
+    height: 46%;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 9999px;
+    filter: blur(72px);
+    opacity: 0.38;
+    background: radial-gradient(
+      ellipse at 50% 0%,
+      color-mix(in oklab, var(--primary) 32%, transparent) 0%,
+      transparent 70%
+    );
+  }
+
+  .dark .scan-halo::before {
+    opacity: 0.28;
+  }
+
+  /* Marketing device mockup. The titanium rail, black bezel and screen glare
+     describe hardware, so they hold the same colors in both themes while the
+     screen content follows the app palette. */
+  .device-rail {
+    background-image: linear-gradient(
+      152deg,
+      oklch(0.84 0.004 60) 0%,
+      oklch(0.6 0.005 60) 16%,
+      oklch(0.38 0.004 60) 40%,
+      oklch(0.72 0.005 60) 66%,
+      oklch(0.42 0.004 60) 100%
+    );
+  }
+
+  .device-bezel {
+    background-color: oklch(0.08 0 0);
+  }
+
+  .device-glare {
+    background-image: linear-gradient(
+      118deg,
+      oklch(1 0 0 / 0.16) 0%,
+      oklch(1 0 0 / 0.05) 20%,
+      transparent 36%,
+      transparent 100%
+    );
+  }
+
+  /* Viewport chrome for camera / image previews. */
+  .scan-viewport {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent),
+      0 18px 50px -30px color-mix(in oklab, var(--foreground) 55%, transparent);
+  }
+
+  /* Inherits the brand-tinted thumb from the base layer. Only the narrower
+     track and the opaque backdrop differ, since the chat pane scrolls over a
+     card rather than the page background. */
+  .chat-message-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .chat-message-scroll::-webkit-scrollbar-track {
+    background: var(--background);
+  }
+
+  .chat-thinking-text {
+    background-image: linear-gradient(
+      90deg,
+      var(--muted-foreground) 0%,
+      var(--muted-foreground) 38%,
+      var(--foreground) 50%,
+      var(--muted-foreground) 62%,
+      var(--muted-foreground) 100%
+    );
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: chat-thinking-wave 2.4s ease-in-out infinite;
+  }
+
+  @keyframes chat-thinking-wave {
+    0% {
+      background-position: 120% 50%;
+    }
+
+    100% {
+      background-position: -120% 50%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chat-thinking-text {
+      animation: none;
+      background-image: none;
+      color: var(--muted-foreground);
+    }
+  }
 }

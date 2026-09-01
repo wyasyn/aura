@@ -1,0 +1,1854 @@
+// Aurora — better-auth + domain models
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── better-auth core ───────────────────────────────────────────────────────
+
+model User {
+  id                  String    @id
+  name                String
+  email               String
+  emailVerified       Boolean   @default(false)
+  image               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  role                String?   @default("user")
+  banned              Boolean?  @default(false)
+  banReason           String?
+  banExpires          DateTime?
+  onboardingCompleted Boolean?  @default(false)
+  scanTier            ScanTier  @default(starter)
+
+  /// An uploaded profile picture, stored as bytes rather than a URL.
+  ///
+  /// `image` above stays the render source for every existing surface: on
+  /// upload it is set to this user's avatar route, so a federated sign-in that
+  /// supplies a remote URL and a picture someone uploaded here are read the
+  /// same way by the sidebar and the expert cards.
+  ///
+  /// Bytes in the row follow Scan.imageData, which already stores photographs
+  /// this way — there is no object store configured, and inventing one for
+  /// avatars would be a larger change than the feature.
+  avatarData          Bytes?
+  avatarMimeType      String?
+  avatarUpdatedAt     DateTime?
+
+  sessions                      Session[]
+  accounts                      Account[]
+  members                       Member[]
+  invitations                   Invitation[]       @relation("Inviter")
+  profile                       UserProfile?
+  location                      UserLocation?
+  scanBalance                   ScanBalance?
+  scanLedgers                   ScanLedger[]       @relation("ScanLedgerUser")
+  grantedScans                  ScanLedger[]       @relation("ScanGrantedBy")
+  scans                         Scan[]
+  scanFeedbacks                 ScanFeedback[]
+  chatConversations             ChatConversation[]
+  products                      Product[]          @relation("ProductCreator")
+  billingProfile                BillingProfile?
+  payments                      Payment[]
+  expertProfile                 ExpertProfile?
+  expertApplicationsReviewed    ExpertProfile[]    @relation("ExpertReviewedBy")
+  bookings                      Booking[]          @relation("BookingUser")
+  expertReviews                 ExpertReview[]     @relation("ReviewUser")
+  affiliateProfile              AffiliateProfile?
+  affiliateApplicationsReviewed AffiliateProfile[] @relation("AffiliateReviewedBy")
+  affiliatePayoutsRecorded      AffiliatePayout[]  @relation("AffiliatePayoutCreatedBy")
+  apiKeysCreated                ApiKey[]           @relation("ApiKeyCreatedBy")
+  clinicPatient                 ClinicPatient?
+  trainingRecords               TrainingRecord[]
+  recommendationFeedback        RecommendationFeedback[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id             String   @id
+  expiresAt      DateTime
+  token          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  impersonatedBy String?
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ─── better-auth organization plugin ────────────────────────────────────────
+
+model Organization {
+  id        String   @id
+  name      String
+  slug      String   @unique
+  logo      String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  members         Member[]
+  invitations     Invitation[]
+  products        Product[]
+  scans           Scan[]
+  // White-label config lives in its own model so this one stays exactly as
+  // better-auth's organization plugin expects it.
+  clinic          ClinicSettings?
+  apiKeys         ApiKey[]
+  patients        ClinicPatient[]
+  trainingRecords TrainingRecord[]
+  bookings        Booking[]
+
+  @@map("organization")
+}
+
+/**
+ * Where a membership sits in its lifecycle.
+ * Revoking is a state change, not a delete: removing the row would destroy
+ * the record that the relationship ever existed, which is the thing an audit
+ * of tenant access most needs to show.
+ * `invited` is carried here for completeness, but the pending-invite workflow
+ * lives in Invitation and is not duplicated — a Member row is created only
+ * once an invitation is accepted.
+ */
+enum MembershipStatus {
+  active
+  invited
+  suspended
+  revoked
+}
+
+model Member {
+  id             String           @id
+  userId         String
+  organizationId String
+  role           String           @default("member")
+  // Defaulted so every existing membership backfills to active on migration.
+  status         MembershipStatus @default(active)
+  createdAt      DateTime         @default(now())
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId, status])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id
+  email          String
+  inviterId      String
+  organizationId String
+  role           String?
+  status         String       @default("pending")
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime
+  inviter        User         @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@map("invitation")
+}
+
+// ─── Aurora domain ────────────────────────────────────────────────────────────
+
+enum BiologicalSex {
+  female
+  male
+  intersex
+  prefer_not_to_say
+}
+
+enum SkinType {
+  oily
+  dry
+  combination
+  sensitive
+  normal
+}
+
+enum FitzpatrickBand {
+  I
+  II
+  III
+  IV
+  V
+  VI
+}
+
+enum SkinDosha {
+  vata
+  pitta
+  kapha
+  balanced
+}
+
+enum AgeBand {
+  under_18
+  age_18_24
+  age_25_34
+  age_35_44
+  age_45_54
+  age_55_64
+  age_65_plus
+}
+
+enum LocationSource {
+  manual
+  geocode
+  browser
+}
+
+enum ClimateBand {
+  low
+  moderate
+  high
+  extreme
+}
+
+enum ScanLedgerReason {
+  signup_bonus
+  admin_grant
+  pack_grant
+  scan_debit
+  chat_token_debit
+  tier_upgrade
+  adjustment
+}
+
+enum ChatConversationKind {
+  advice
+  follow_up
+}
+
+enum ChatMessageRole {
+  user
+  assistant
+  system_refusal
+}
+
+enum AiProvider {
+  gemini
+  vercel_ai
+  openrouter
+  other
+}
+
+enum ScanTier {
+  starter
+  plus
+  pro
+}
+
+enum PaymentProvider {
+  mock
+  stripe
+}
+
+enum PaymentStatus {
+  pending
+  requires_action
+  succeeded
+  failed
+  refunded
+}
+
+enum ScanCaptureMode {
+  still
+  live
+}
+
+model AiModelRate {
+  id                     String     @id @default(cuid())
+  provider               AiProvider
+  modelId                String
+  displayName            String?
+  inputMicrosPer1M       Int
+  outputMicrosPer1M      Int
+  cachedInputMicrosPer1M Int        @default(0)
+  isActive               Boolean    @default(true)
+  isScanDefault          Boolean    @default(false)
+  supportsVision         Boolean    @default(true)
+  supportsLive           Boolean    @default(false)
+  assignedTier           ScanTier?
+  thinkingLevel          String?
+  effectiveFrom          DateTime   @default(now())
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  @@unique([provider, modelId])
+  // A tier holds at most one still model and one live model.
+  @@unique([assignedTier, supportsLive])
+  @@index([isActive])
+  @@index([isScanDefault])
+  @@map("ai_model_rate")
+}
+
+enum ScanStatus {
+  pending
+  processing
+  completed
+  failed
+  cancelled
+}
+
+enum AssessmentBand {
+  minimal
+  mild
+  moderate
+  elevated
+  not_assessed
+}
+
+enum ReportFormat {
+  pdf
+  json
+}
+
+model UserProfile {
+  id                     String           @id @default(cuid())
+  userId                 String           @unique
+  user                   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth            DateTime?
+  ageBand                AgeBand?
+  biologicalSex          BiologicalSex?
+  skinType               SkinType?
+  fitzpatrickBand        FitzpatrickBand?
+  skinDosha              SkinDosha?
+  primaryConcerns        String[]         @default([])
+  skinGoals              String[]         @default([])
+  allergies              String?
+  currentRoutine         Json?
+  previousPrescriptions  Json?
+  medications            Json?
+  lifestyleFactors       Json?
+  consentVersion         String?
+  consentAcceptedAt      DateTime?
+  photoProcessingConsent Boolean          @default(false)
+  marketingConsent       Boolean          @default(false)
+
+  // Separate, explicit, and off by default: consenting to have a scan analysed
+  // is not consenting to have it improve a model. Revocable, and revoking
+  // withdraws records already collected — see lib/training/consent.ts.
+  trainingConsent        Boolean   @default(false)
+  trainingConsentAt      DateTime?
+  trainingConsentVersion String?
+  onboardingStep         String    @default("welcome")
+  onboardingCompletedAt  DateTime?
+  expertReviewRequested  Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([onboardingCompletedAt])
+  @@map("user_profile")
+}
+
+model UserLocation {
+  id              String         @id @default(cuid())
+  userId          String         @unique
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  city            String?
+  region          String?
+  country         String?
+  postalCode      String?
+  latitude        Float?
+  longitude       Float?
+  timezone        String?
+  locationSource  LocationSource @default(manual)
+  uvIndexBand     ClimateBand?
+  humidityBand    ClimateBand?
+  temperatureBand ClimateBand?
+  climateZone     String?
+  seasonBand      String?
+  lastSyncedAt    DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@map("user_location")
+}
+
+model ScanBalance {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remaining            Int       @default(0)
+  lifetimeUsed         Int       @default(0)
+  lifetimeGranted      Int       @default(0)
+  // Usage since the current plan started. Reset whenever a pack replaces the
+  // balance, so "scans used" reflects the plan a user is on right now.
+  periodUsed           Int       @default(0)
+  periodGranted        Int       @default(0)
+  periodStartedAt      DateTime?
+  tokenBudgetRemaining BigInt    @default(0)
+  lifetimeTokensUsed   BigInt    @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("scan_balance")
+}
+
+model ScanLedger {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation("ScanLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
+  delta       Int
+  reason      ScanLedgerReason
+  tier        ScanTier
+  scanId      String?
+  scan        Scan?            @relation(fields: [scanId], references: [id], onDelete: SetNull)
+  packId      String?
+  pack        ScanPack?        @relation(fields: [packId], references: [id], onDelete: SetNull)
+  grantedById String?
+  grantedBy   User?            @relation("ScanGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  metadata    Json?
+  createdAt   DateTime         @default(now())
+
+  @@index([userId])
+  @@index([scanId])
+  @@index([createdAt])
+  @@map("scan_ledger")
+}
+
+model ScanPack {
+  id         String       @id @default(cuid())
+  tier       ScanTier
+  scanCount  Int
+  priceCents Int
+  label      String
+  isActive   Boolean      @default(true)
+  sortOrder  Int          @default(0)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  ledgers    ScanLedger[]
+  payments   Payment[]
+
+  @@index([tier, isActive])
+  @@map("scan_pack")
+}
+
+// ─── billing ────────────────────────────────────────────────────────────────
+
+// User-editable billing identity. Snapshotted onto Payment at purchase time so a
+// later edit never rewrites an issued receipt.
+model BillingProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName     String
+  email        String
+  phone        String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  country      String?
+  taxId        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("billing_profile")
+}
+
+model Payment {
+  id              String          @id @default(cuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  packId          String?
+  pack            ScanPack?       @relation(fields: [packId], references: [id], onDelete: SetNull)
+  provider        PaymentProvider @default(mock)
+  providerRef     String          @unique
+  status          PaymentStatus   @default(pending)
+  amountCents     Int
+  currency        String          @default("USD")
+  tier            ScanTier
+  scanCount       Int
+  receiptNumber   String          @unique
+  billingSnapshot Json?
+  cardBrand       String?
+  cardLast4       String?
+  failureReason   String?
+  paidAt          DateTime?
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([userId, createdAt])
+  @@map("payment")
+}
+
+/// A catalogue entry, owned either by the platform or by one clinic.
+///
+/// organizationId null means an Aurora product: global, administered by the
+/// platform, offered to every eligible patient. Non-null means the product
+/// belongs to exactly one clinic and may only ever be seen, edited or
+/// recommended inside that tenant.
+model Product {
+  id                String        @id @default(cuid())
+
+  // ── Provenance ────────────────────────────────────────────────────────────
+  /// Where this product came from. WooCommerce is the ecommerce source of
+  /// truth; Aurora is the application source of truth for what the engine
+  /// reads. The recommendation engine never asks which of these a product is.
+  source            ProductSource @default(manual)
+  /// The stable identifier in the system named by `source`.
+  ///
+  /// For WooCommerce this is the numeric product id as a string. It exists so
+  /// a re-sync updates the same row: matching on slug would create a duplicate
+  /// the moment somebody renames a product in the store, because the slug is
+  /// derived from the name.
+  externalId        String?
+  /// When the source system last reported this product changed.
+  sourceUpdatedAt   DateTime?
+  /// When Aurora last saw this product in a sync.
+  lastSyncedAt      DateTime?
+  /// Digest of the source fields intelligence is derived from.
+  ///
+  /// Name, description and categories — not price or stock. A price change is
+  /// a source change that tells the extraction pipeline nothing, and
+  /// re-extracting on one would spend a model call to rewrite the same answer.
+  sourceHash        String?
+  /// Set when the source changed in a way that could alter the intelligence.
+  /// Cleared by a successful extraction.
+  intelligenceStale Boolean       @default(false)
+  /// Where this product is in the extraction lifecycle.
+  ///
+  /// Deliberately a separate axis from verificationStatus. Extraction is what
+  /// the system derived; verification is whether a person has checked it. A
+  /// product can be fully extracted and unverified, and conflating the two
+  /// would make an automated pass look like human sign-off.
+  intelligenceStatus ProductIntelligenceStatus @default(pending)
+  /// Why the last extraction failed. Never carries credentials or prompts.
+  intelligenceError  String?
+  intelligenceExtractedAt DateTime?
+  /// Where each intelligence field's current value came from.
+  ///
+  /// A map of field name to "source", "extraction" or "admin". Written by
+  /// whichever step last set the field, so the admin surface can say how a
+  /// value was arrived at instead of implying every field was reviewed. Fields
+  /// absent from the map have no recorded provenance and are shown as such —
+  /// claiming an origin nobody recorded would be worse than admitting the gap.
+  intelligenceProvenance Json?
+
+  sku               String
+  name              String
+  slug              String
+  description       String
+  /// Who makes it. Distinct from the clinic that stocks it (organizationId).
+  brand             String?
+  /// WooCommerce merchandising taxonomy ("face-hands"). Not a classification —
+  /// classification is a separate axis and must not overwrite it.
+  category          String
+
+  // ── Classification ────────────────────────────────────────────────────────
+  /// What this product principally is. Null means nobody has judged it, which
+  /// is deliberately distinct from `other` — one says unassessed, the other
+  /// says assessed and fitting nothing.
+  primaryClassification    ProductClassification?
+  /// Further true statements about the same product. Organic and natural are
+  /// separate claims: organic speaks to how inputs were farmed, natural to
+  /// whether they were synthesised, and a product can be either without being
+  /// both. Excludes the primary, which is not repeated here.
+  secondaryClassifications ProductClassification[] @default([])
+  /// How much the classification can be relied on. A band rather than a
+  /// percentage: a number here would imply a precision nobody measured, which
+  /// the project forbids for exactly this reason.
+  classificationConfidence DataConfidence @default(unverified)
+
+  // ── Skin compatibility ────────────────────────────────────────────────────
+  targetConcerns    String[]      @default([])
+  suitableSkinTypes String[]      @default([])
+  /// What the product is claimed to do, as cosmetic benefit vocabulary.
+  cosmeticBenefits  String[]      @default([])
+
+  // ── Ingredients ───────────────────────────────────────────────────────────
+  /// Free-text INCI list as supplied by the store. Kept because it is the only
+  /// ingredient data most products have, and the allergy filter reads it.
+  ingredients       String?
+  /// Parsed INCI names. Still a string array: the structured relation is
+  /// `ingredientLinks`, and this stays as the fallback the allergy filter uses
+  /// when no ingredient row has been matched yet.
+  ingredientList    String[]      @default([])
+  ingredientLinks   ProductIngredient[]
+
+  // ── Climate compatibility ─────────────────────────────────────────────────
+  /// Coarse tags, matched against tags derived from a user's live climate.
+  climateTags       String[]      @default([])
+  /// Bands this product suits, drawn from the same ClimateBand vocabulary
+  /// UserLocation already stores — so a future engine can compare a user's
+  /// band against these directly rather than translating between two scales.
+  suitableHumidity    ClimateBand[] @default([])
+  suitableTemperature ClimateBand[] @default([])
+  suitableUv          ClimateBand[] @default([])
+  /// Anything environmental that does not fit a band, e.g. "not for use under
+  /// occlusive layers in high pollution".
+  environmentalNotes  String?
+
+  // ── Routine ───────────────────────────────────────────────────────────────
+  routineCategory   RoutineCategory?
+  /// Order within a routine, low to high — cleanser before serum before
+  /// sunscreen. Null means unplaced rather than first.
+  routineStep       Int?
+  amSuitable        Boolean       @default(true)
+  pmSuitable        Boolean       @default(true)
+
+  // ── Commercial ────────────────────────────────────────────────────────────
+  /// Minor units. Aurora products are also priced in WooCommerce; this column
+  /// is authoritative only where it is set, and a clinic's own products have
+  /// nowhere else to carry a price.
+  priceCents        Int?
+  currency          String?
+  availability      ProductAvailability @default(unknown)
+  imageUrl          String?
+  storeUrl          String?
+  isActive          Boolean       @default(true)
+  /// Whether the product may enter new recommendations. Separate from
+  /// isActive so a clinic can keep a product listed while withdrawing it from
+  /// the engine.
+  isRecommendable   Boolean       @default(true)
+
+  // ── Data quality ──────────────────────────────────────────────────────────
+  /// 0–100, recomputed on every write from which recommendation-relevant
+  /// fields are populated. Honest to state numerically because it counts
+  /// filled fields rather than judging them — see lib/products/completeness.ts.
+  completenessScore Int           @default(0)
+  verificationStatus DataConfidence @default(unverified)
+  lastVerifiedAt    DateTime?
+
+  createdById       String
+  createdBy         User          @relation("ProductCreator", fields: [createdById], references: [id])
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  /// Scoped to the owner so two clinics can both sell "vitamin-c-serum".
+  /// Postgres treats NULLs as distinct, so these do NOT constrain Aurora
+  /// products against each other — a partial unique index added in the same
+  /// migration covers that case.
+  @@unique([organizationId, sku])
+  @@unique([organizationId, slug])
+  /// One Aurora row per external product. Postgres treats NULLs as distinct,
+  /// so manual and fallback products — which have no external id — never
+  /// collide with each other under this.
+  @@unique([source, externalId])
+  @@index([isActive])
+  @@index([organizationId])
+  @@index([organizationId, isActive, isRecommendable])
+  @@index([intelligenceStatus])
+  @@index([primaryClassification])
+  @@index([routineCategory])
+  @@map("product")
+}
+
+/// One ingredient's place in one product.
+///
+/// The join exists so "which ingredient provides this benefit" is answerable.
+/// Product.ingredientList is a bag of strings that cannot say whether an INCI
+/// name is a headline active or the preservative at the end of the list, and a
+/// recommendation that cites an ingredient needs to know the difference.
+model ProductIngredient {
+  id           String     @id @default(cuid())
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  /// Position on the INCI list, 1-based. Concentration descends with position,
+  /// so this is the only ordering signal a label actually gives.
+  position     Int?
+  role         IngredientRole @default(unspecified)
+  /// Marks the ingredients a recommendation may reasonably cite as the reason.
+  isKeyActive  Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  @@unique([productId, ingredientId])
+  @@index([ingredientId])
+  @@index([productId, isKeyActive])
+  @@map("product_ingredient")
+}
+
+/// What an ingredient is doing in a formulation.
+enum IngredientRole {
+  active
+  humectant
+  emollient
+  occlusive
+  exfoliant
+  antioxidant
+  surfactant
+  preservative
+  fragrance
+  solvent
+  unspecified
+}
+
+/// Where an ingredient comes from. Separate from classification: a botanical
+/// extract can appear in a conventional formulation, and a synthetic can appear
+/// in one marketed as natural.
+enum IngredientSource {
+  botanical
+  mineral
+  marine
+  microbial
+  synthetic
+  animal_derived
+  unspecified
+}
+
+/// How far a piece of product data can be trusted.
+///
+/// A band rather than a score. "62% confident" would be a number nobody
+/// measured; "imported, not yet checked by a person" is something that can
+/// actually be established.
+enum DataConfidence {
+  /// Nothing has been asserted.
+  unverified
+  /// Populated by an automated import or inference.
+  imported
+  /// Checked by a person against the label or supplier data.
+  confirmed
+}
+
+/// Where a product sits in a routine, coarse enough to order steps by.
+enum RoutineCategory {
+  cleanser
+  exfoliant
+  toner
+  essence
+  serum
+  treatment
+  moisturiser
+  oil
+  mask
+  sunscreen
+  haircare
+  bodycare
+  other
+}
+
+enum ProductAvailability {
+  in_stock
+  low_stock
+  out_of_stock
+  discontinued
+  unknown
+}
+
+/// What a product is, for the recommendation engine to reason about.
+///
+/// Organic and natural are deliberately separate: organic speaks to how the
+/// inputs were farmed, natural to whether they were synthesised. A product can
+/// carry several of these at once, which is why the column is an array.
+enum ProductClassification {
+  organic
+  natural
+  synthetic
+  dermatological
+  ayurvedic
+  clinical
+  other
+}
+
+model Ingredient {
+  id                String   @id @default(cuid())
+  inciName          String   @unique
+  displayName       String?
+  synonyms          String[] @default([])
+  targetConcerns    String[] @default([])
+  suitableSkinTypes String[] @default([])
+  climateTags       String[] @default([])
+  doshaAffinities   String[] @default([])
+  /// What it does in a formulation. An array because one ingredient commonly
+  /// serves several purposes — glycerin is both humectant and solvent.
+  functions         IngredientRole[] @default([])
+  source            IngredientSource @default(unspecified)
+  /// Cosmetic benefits attributable to this ingredient, in the same vocabulary
+  /// as Product.cosmeticBenefits so the two can be compared.
+  benefits          String[] @default([])
+  /// Ingredients or conditions this should not be combined with. Cosmetic
+  /// guidance only — never a medical contraindication.
+  avoidWith         String[] @default([])
+  notes             String?
+  productLinks      ProductIngredient[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([targetConcerns])
+  @@map("ingredient")
+}
+
+// ─── expert marketplace ─────────────────────────────────────────────────────
+
+enum ExpertSpecialty {
+  dermatologist
+  ayurvedic_practitioner
+}
+
+enum ExpertApplicationStatus {
+  pending
+  approved
+  rejected
+}
+
+enum BookingStatus {
+  pending_payment
+  confirmed
+  completed
+  cancelled
+  no_show
+}
+
+model ExpertProfile {
+  id                     String                  @id @default(cuid())
+  userId                 String                  @unique
+  user                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialty              ExpertSpecialty
+  headline               String
+  bio                    String
+  credentials            String
+  yearsExperience        Int
+  consultationPriceCents Int
+  status                 ExpertApplicationStatus @default(pending)
+  rejectionReason        String?
+  isAcceptingBookings    Boolean                 @default(true)
+  avgRating              Float?
+  reviewCount            Int                     @default(0)
+  appliedAt              DateTime                @default(now())
+  reviewedAt             DateTime?
+  reviewedById           String?
+  reviewedBy             User?                   @relation("ExpertReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  availabilitySlots   ExpertAvailabilitySlot[]
+  bookings            Booking[]
+  reviews             ExpertReview[]
+  trainingValidations TrainingValidation[]
+
+  @@index([specialty, status])
+  @@index([status])
+  @@map("expert_profile")
+}
+
+model ExpertAvailabilitySlot {
+  id        String        @id @default(cuid())
+  expertId  String
+  expert    ExpertProfile @relation(fields: [expertId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  endTime   DateTime
+  isBooked  Boolean       @default(false)
+  booking   Booking?
+  createdAt DateTime      @default(now())
+
+  @@unique([expertId, startTime])
+  @@index([expertId, isBooked, startTime])
+  @@map("expert_availability_slot")
+}
+
+// Consultation booking. Tracks its own Stripe payment fields directly rather
+// than going through the scan-pack Payment ledger — a consultation is a
+// different product with a different lifecycle (a slot to hold, a video room
+// to create on success), and keeping it separate avoids touching the
+// already-shipped scan-pack payment/receipt pipeline.
+model Booking {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("BookingUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  /**
+   * The clinic whose environment this booking was made in.
+   *
+   * Null is a real state, not missing data: a consultation booked on the
+   * platform belongs to no clinic. The expert stays global — one expert serves
+   * many clinics — so tenancy is recorded on the booking, never on
+   * ExpertProfile.
+   */
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  expertId String
+  expert   ExpertProfile          @relation(fields: [expertId], references: [id], onDelete: Cascade)
+  slotId   String                 @unique
+  slot     ExpertAvailabilitySlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  status   BookingStatus          @default(pending_payment)
+  notes    String?
+
+  amountCents          Int
+  currency             String          @default("USD")
+  paymentProvider      PaymentProvider @default(stripe)
+  paymentRef           String?         @unique
+  paidAt               DateTime?
+  cardBrand            String?
+  cardLast4            String?
+  paymentFailureReason String?
+
+  videoRoomUrl  String?
+  videoRoomName String?
+
+  review ExpertReview?
+
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  confirmedAt        DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  @@index([userId, createdAt])
+  @@index([expertId, createdAt])
+  @@index([status])
+  @@index([organizationId, createdAt])
+  @@map("booking")
+}
+
+model ExpertReview {
+  id        String        @id @default(cuid())
+  bookingId String        @unique
+  booking   Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation("ReviewUser", fields: [userId], references: [id], onDelete: Cascade)
+  expertId  String
+  expert    ExpertProfile @relation(fields: [expertId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String?
+  createdAt DateTime      @default(now())
+
+  @@index([expertId, createdAt])
+  @@map("expert_review")
+}
+
+// ─── affiliate marketplace ──────────────────────────────────────────────────
+
+enum AffiliateApplicationStatus {
+  pending
+  approved
+  rejected
+}
+
+// Actual purchases happen on the external WooCommerce store, not in this
+// app — see AffiliateOrder. "confirmed" mirrors WooCommerce's "completed"
+// order status; "cancelled" covers both cancellation and refund, either of
+// which voids the commission.
+enum AffiliateOrderStatus {
+  pending
+  confirmed
+  cancelled
+}
+
+// Single global row (id is always "global") holding the current commission
+// and customer-discount rates. Each AffiliateOrder snapshots the rate that
+// applied at attribution time, so changing this never rewrites history.
+model AffiliateSettings {
+  id                  String   @id @default("global")
+  commissionRateBps   Int      @default(1000)
+  customerDiscountBps Int      @default(1000)
+  updatedAt           DateTime @updatedAt
+
+  @@map("affiliate_settings")
+}
+
+model AffiliateProfile {
+  id                  String                     @id @default(cuid())
+  userId              String                     @unique
+  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status              AffiliateApplicationStatus @default(pending)
+  howTheyPromote      String
+  website             String?
+  rejectionReason     String?
+  // Set on approval, once the WooCommerce coupon is created.
+  couponCode          String?                    @unique
+  wooCommerceCouponId Int?
+  appliedAt           DateTime                   @default(now())
+  reviewedAt          DateTime?
+  reviewedById        String?
+  reviewedBy          User?                      @relation("AffiliateReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  orders  AffiliateOrder[]
+  payouts AffiliatePayout[]
+
+  @@index([status])
+  @@map("affiliate_profile")
+}
+
+model AffiliateOrder {
+  id                        String               @id @default(cuid())
+  affiliateId               String
+  affiliate                 AffiliateProfile     @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  // The WooCommerce order id. Unique so a retried webhook delivery (WooCommerce
+  // resends on any non-2xx response) can never double-count a commission.
+  wooCommerceOrderId        Int                  @unique
+  status                    AffiliateOrderStatus @default(pending)
+  couponCode                String
+  orderTotalCents           Int
+  currency                  String
+  commissionRateBpsSnapshot Int
+  commissionAmountCents     Int
+  customerEmail             String?
+  placedAt                  DateTime
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  @@index([affiliateId, status])
+  @@map("affiliate_order")
+}
+
+// A manually-recorded payment to an affiliate, made outside the app (bank
+// transfer, etc.). Owed balance = confirmed AffiliateOrder commissions minus
+// the sum of these, computed on read rather than stored.
+model AffiliatePayout {
+  id          String           @id @default(cuid())
+  affiliateId String
+  affiliate   AffiliateProfile @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  amountCents Int
+  note        String?
+  paidAt      DateTime         @default(now())
+  createdById String?
+  createdBy   User?            @relation("AffiliatePayoutCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+
+  @@index([affiliateId])
+  @@map("affiliate_payout")
+}
+
+model Scan {
+  id                String             @id @default(cuid())
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId    String?
+  organization      Organization?      @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  status            ScanStatus         @default(pending)
+  captureMode       ScanCaptureMode    @default(still)
+  profileSnapshot   Json?
+  locationSnapshot  Json?
+  consentSnapshot   Json?
+  imageRetained     Boolean            @default(false)
+  imageStorageKey   String?
+  imageMimeType     String?
+  imageData         Bytes?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  usage             ScanUsage?
+  result            ScanResult?
+  report            Report?
+  trainingRecord    TrainingRecord?
+  feedback          ScanFeedback?
+  recommendations   ScanRecommendation[]
+  recommendationRun ScanRecommendationRun?
+  scanLedgers       ScanLedger[]
+  chatConversations ChatConversation[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("scan")
+}
+
+model ScanUsage {
+  id                  String     @id @default(cuid())
+  scanId              String     @unique
+  scan                Scan       @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  provider            AiProvider
+  modelId             String
+  inputTokens         Int        @default(0)
+  outputTokens        Int        @default(0)
+  cachedTokens        Int        @default(0)
+  reasoningTokens     Int?
+  totalTokens         Int        @default(0)
+  estimatedCostMicros Int?
+  latencyMs           Int?
+  rawUsage            Json?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  @@index([createdAt])
+  @@index([modelId])
+  @@map("scan_usage")
+}
+
+model ScanResult {
+  id                     String         @id @default(cuid())
+  scanId                 String         @unique
+  scan                   Scan           @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  overallBand            AssessmentBand @default(not_assessed)
+  dimensions             Json?
+  doshaTyping            Json?
+  summary                String?
+  concernsNotVisible     Json?
+  naturalRecommendations Json?
+  recommendations        Json?
+  disclaimerVersion      String         @default("1.0")
+  reportFormatVersion    String         @default("1.0")
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  @@map("scan_result")
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  scanId      String       @unique
+  scan        Scan         @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  format      ReportFormat @default(pdf)
+  storageKey  String?
+  generatedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("report")
+}
+
+enum TrainingRecordStatus {
+  /**
+   * De-identified and waiting for a qualified expert to review it.
+   */
+  pending_validation
+  /**
+   * An expert confirmed or corrected it. Only these are ever exported.
+   */
+  validated
+  /**
+   * An expert judged it unusable. Kept so it is not re-collected.
+   */
+  rejected
+  /**
+   * Consent was revoked, or retention expired. Excluded and purgeable.
+   */
+  withdrawn
+}
+
+enum TrainingVerdict {
+  /**
+   * The model's assessment was right.
+   */
+  confirmed
+  /**
+   * The assessment was wrong; the corrected band is stored alongside.
+   */
+  corrected
+  /**
+   * Unusable — poor input, ambiguous case, or not a real assessment.
+   */
+  rejected
+}
+
+/**
+ * One candidate example for model training.
+ * `payload` is de-identified: no names, emails, ids, free text, precise dates
+ * or locations finer than country. That is what gets exported.
+ * The row itself is pseudonymous rather than anonymous — sourceUserId and
+ * sourceScanId are deliberately kept so consent can be revoked and retention
+ * enforced later. Without that link, a withdrawal request could not be honoured
+ * because there would be no way to find the person's records. Those columns are
+ * never part of an export.
+ */
+model TrainingRecord {
+  id             String        @id @default(cuid())
+  sourceScanId   String        @unique
+  sourceScan     Scan          @relation(fields: [sourceScanId], references: [id], onDelete: Cascade)
+  sourceUserId   String
+  sourceUser     User          @relation(fields: [sourceUserId], references: [id], onDelete: Cascade)
+  /**
+   * The clinic the scan belonged to, for tenant-scoped withdrawal.
+   */
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  status          TrainingRecordStatus @default(pending_validation)
+  payload         Json
+  /**
+   * Version of the de-identification rules used, so a later change is traceable.
+   */
+  deidentVersion  String
+  deidentifiedAt  DateTime             @default(now())
+  withdrawnAt     DateTime?
+  withdrawnReason String?
+
+  validation TrainingValidation?
+
+  createdAt DateTime @default(now())
+
+  @@index([status])
+  @@index([sourceUserId])
+  @@index([organizationId])
+  @@map("training_record")
+}
+
+/**
+ * A qualified expert's judgement on one candidate example.
+ */
+model TrainingValidation {
+  id               String          @id @default(cuid())
+  trainingRecordId String          @unique
+  trainingRecord   TrainingRecord  @relation(fields: [trainingRecordId], references: [id], onDelete: Cascade)
+  /**
+   * The reviewing ExpertProfile, so provenance survives a role change.
+   */
+  expertId         String
+  expert           ExpertProfile   @relation(fields: [expertId], references: [id], onDelete: Restrict)
+  verdict          TrainingVerdict
+  correctedBand    AssessmentBand?
+  notes            String?
+  createdAt        DateTime        @default(now())
+
+  @@index([expertId])
+  @@map("training_validation")
+}
+
+/**
+ * Append-only record of who did what to sensitive data.
+ * Never updated or deleted by application code: an audit trail that can be
+ * edited is not an audit trail. Retention purges it on a schedule instead.
+ */
+/**
+ * Whether the audited action was carried out, refused, or failed.
+ */
+enum AuditResult {
+  success
+  denied
+  failure
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  /**
+   * Null for system actions such as a scheduled purge.
+   */
+  actorId        String?
+  actorRole      String?
+  action         String
+  subjectType    String
+  subjectId      String?
+  organizationId String?
+  result         AuditResult @default(success)
+  /**
+   * Correlates entries written while serving one request.
+   */
+  requestId      String?
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+
+  @@index([action, createdAt])
+  @@index([subjectType, subjectId])
+  @@index([organizationId, createdAt])
+  @@map("audit_log")
+}
+
+model ScanFeedback {
+  id        String   @id @default(cuid())
+  scanId    String   @unique
+  scan      Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  message   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("scan_feedback")
+}
+
+model ChatConversation {
+  id        String               @id @default(cuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scanId    String?
+  scan      Scan?                @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  kind      ChatConversationKind
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  messages  ChatMessage[]
+
+  @@index([userId])
+  @@index([scanId])
+  @@index([userId, kind])
+  @@map("chat_conversation")
+}
+
+model ChatMessage {
+  id                  String           @id @default(cuid())
+  conversationId      String
+  conversation        ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role                ChatMessageRole
+  content             String
+  imageMimeType       String?
+  imageData           Bytes?
+  inputTokens         Int              @default(0)
+  outputTokens        Int              @default(0)
+  cachedTokens        Int              @default(0)
+  reasoningTokens     Int?
+  totalTokens         Int              @default(0)
+  modelId             String?
+  estimatedCostMicros Int?
+  metadata            Json?
+  blocked             Boolean          @default(false)
+  createdAt           DateTime         @default(now())
+
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+  @@index([modelId])
+  @@index([createdAt])
+  @@map("chat_message")
+}
+
+enum AiUsageFeature {
+  scan_analyze
+  scan_live
+  chat_reply
+  /// Constrained second pass that turns a chat reply into recommendation cards.
+  chat_recommendations
+  chat_guardrail
+  transcribe
+}
+
+/// Single log of every billable provider call. Written alongside ScanUsage /
+/// ChatMessage, which stay the source of truth for per-scan display and token
+/// budgeting. Reference columns are plain ids without foreign keys so spend
+/// history survives scan, conversation, and user deletion.
+model AiUsage {
+  id                  String         @id @default(cuid())
+  feature             AiUsageFeature
+  provider            AiProvider
+  modelId             String
+  userId              String?
+  scanId              String?
+  conversationId      String?
+  chatMessageId       String?        @unique
+  inputTokens         Int            @default(0)
+  outputTokens        Int            @default(0)
+  cachedTokens        Int            @default(0)
+  reasoningTokens     Int?
+  totalTokens         Int            @default(0)
+  estimatedCostMicros Int?
+  marginMicros        Int?
+  latencyMs           Int?
+  rawUsage            Json?
+  createdAt           DateTime       @default(now())
+
+  @@index([createdAt])
+  @@index([feature, createdAt])
+  @@index([modelId, createdAt])
+  @@index([userId, createdAt])
+  @@index([scanId])
+  @@map("ai_usage")
+}
+
+// ─── white-label enterprise (clinics & brands) ──────────────────────────────
+
+enum ClinicStatus {
+  active
+  suspended
+}
+
+// A subscription tier a clinic can sit on. Platform-admin editable, and each
+// row maps to a Stripe Price so what we show always matches what Stripe bills.
+model ClinicPlan {
+  id               String   @id @default(cuid())
+  name             String
+  description      String?
+  stripePriceId    String?  @unique
+  priceCents       Int
+  currency         String   @default("USD")
+  // "month" | "year" — kept as a string to match Stripe's own interval values.
+  interval         String   @default("month")
+  seatLimit        Int
+  monthlyScanQuota Int
+  isActive         Boolean  @default(true)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  clinics ClinicSettings[]
+
+  @@index([isActive, sortOrder])
+  @@map("clinic_plan")
+}
+
+// White-label configuration for one tenant. Deliberately separate from
+// Organization: better-auth's organization plugin owns and writes that table,
+// so adding our columns there would risk the plugin's own reads and writes.
+model ClinicSettings {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Serves the tenant at <subdomain>.<root domain>. Lowercased and checked
+  // against a reserved list before it is ever persisted.
+  subdomain String       @unique
+  status    ClinicStatus @default(active)
+
+  // Branding. A null field falls back to Aurora's own default everywhere it
+  // is consumed, so a half-configured clinic still renders correctly.
+  displayName  String
+  logoUrl      String?
+  primaryColor String?
+  accentColor  String?
+  supportEmail String?
+
+  planId String?
+  plan   ClinicPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  // Stripe's own status string rather than an enum: Stripe can introduce a
+  // status we haven't enumerated, and an unmapped value must not make the
+  // webhook throw and retry forever. Normalized through lib/clinics/subscription.
+  subscriptionStatus   String    @default("none")
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+
+  // Counted per billing period and reset when a new period starts, so a quota
+  // check never has to aggregate the whole scan table.
+  periodScanCount Int       @default(0)
+  periodStartedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A domain the clinic owns and manages at its own registrar, e.g.
+  // skin.theirclinic.com. Only served once verified; the subdomain keeps
+  // working either way, so a misconfigured domain never takes a clinic offline.
+  customDomain           String?   @unique
+  customDomainToken      String?
+  customDomainVerifiedAt DateTime?
+
+  // Whether this clinic permits its patients' scans to be considered for model
+  // training. Off by default, and never sufficient on its own: the patient must
+  // also consent. A clinic's patients signed up with the clinic, so the clinic
+  // agreeing cannot stand in for the person whose health data it is.
+  allowTrainingContribution   Boolean   @default(false)
+  trainingContributionSetAt   DateTime?
+  trainingContributionSetById String?
+
+  /// This clinic’s own scoring weights, or null to use Aurora’s defaults.
+  ///
+  /// Json rather than columns because the axis set changes with the engine and
+  /// a migration per axis would be a schema change per tuning release. Read
+  /// through resolveWeights, which merges field by field over the defaults and
+  /// refuses values that would invert the ranking.
+  recommendationWeights Json?
+
+  @@index([status])
+  @@map("clinic_settings")
+}
+
+// Ties a patient to the clinic whose site they belong to.
+//
+// Separate from Member, which is staff: mixing the two would put every patient
+// into the clinic's team list and its seat count. A user has at most one of
+// these, so a patient belongs to exactly one clinic and is refused everywhere
+// else, including the platform host.
+model ClinicPatient {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@map("clinic_patient")
+}
+
+// A partner integration credential, scoped to one tenant.
+model ApiKey {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+
+  // Only a SHA-256 hash is stored. The plaintext key is shown once at creation
+  // and is unrecoverable afterwards, so a database leak does not hand over
+  // working credentials.
+  hashedKey String @unique
+  // Leading characters of the key, kept so a specific credential can be
+  // identified in the UI and in logs without storing the secret.
+  keyPrefix String
+
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdBy   User?     @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@index([organizationId, revokedAt])
+  @@map("api_key")
+}
+
+// ─── recommendation engine ──────────────────────────────────────────────────
+
+/// How a product came to be recommended on a scan.
+///
+/// The distinction is the point of recording anything here. Aurora's engine is
+/// the source of truth; a model filling a gap is a fallback, and a fallback
+/// nobody can count is a fallback nobody can fix.
+enum RecommendationOrigin {
+  /// Chosen and ranked by Aurora's deterministic engine.
+  engine
+  /// Supplied by the model because the engine could not fill the slot.
+  model_gap_fill
+}
+
+/// Why the engine could not fill a slot itself.
+enum GapFillReason {
+  /// The engine returned fewer than the minimum it considers confident.
+  below_minimum
+  /// Every candidate was excluded before scoring.
+  no_safe_candidates
+  /// The engine ran but nothing scored above the floor.
+  no_relevant_candidates
+}
+
+/// One product recommended on one scan, with the reasoning that produced it.
+///
+/// Persisted per product rather than as a JSON blob on ScanResult because this
+/// is what the feedback loop attaches to and what analytics aggregates. A blob
+/// can be displayed; it cannot be joined, counted, or asked which axis carried
+/// a recommendation that nobody found useful.
+///
+/// ScanResult.recommendations stays as the rendered payload the report reads.
+/// These rows are the record of how that payload was decided.
+model ScanRecommendation {
+  id     String @id @default(cuid())
+  scanId String
+  scan   Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  /// The product's slug, not a foreign key.
+  ///
+  /// Deliberate: a recommendation is a record of what was advised at a moment,
+  /// and it must survive the product being deleted or a clinic being removed.
+  /// A cascade here would erase the evidence for advice a person still holds.
+  productSlug String
+  /// Denormalised so the record reads correctly after a rename.
+  productName String
+
+  /// 1-based position as shown. Unique per scan, so ordering cannot drift.
+  rank   Int
+  origin RecommendationOrigin @default(engine)
+  /// Set only when origin is model_gap_fill.
+  gapFillReason GapFillReason?
+
+  /// Final weighted score. Null for a gap fill, which was never scored —
+  /// zero would claim the engine assessed it and found nothing.
+  score    Float?
+  /// Score before the confidence multipliers, so data quality's effect is visible.
+  rawScore Float?
+  /// Per-axis breakdown: fit, weight, points and what matched, one entry per
+  /// axis. The whole reason a ranking can be explained rather than asserted.
+  components Json?
+  /// The concerns this product was selected to address, strongest first.
+  addresses  String[] @default([])
+  /// Key actives whose own concerns matched, cited as the reason.
+  citedActives String[] @default([])
+
+  /// The weights that produced this score, snapshotted.
+  ///
+  /// Stored per recommendation, not referenced. Weights are tenant-editable, so
+  /// a reference would let a clinic retune and silently rewrite the explanation
+  /// of every recommendation it had already given.
+  weights        Json?
+  weightsVersion String?
+
+  /// Which catalogue the product came from. Never the organization id.
+  source String @default("aurora")
+
+  createdAt DateTime @default(now())
+
+  feedback RecommendationFeedback?
+
+  @@unique([scanId, rank])
+  @@unique([scanId, productSlug])
+  @@index([productSlug])
+  @@index([origin])
+  @@index([createdAt])
+  @@map("scan_recommendation")
+}
+
+/// What the engine did on one scan, whether or not it produced anything.
+///
+/// One row per scan, written even when the engine selected nothing. An empty
+/// result is the outcome most worth knowing about, and a table that only
+/// records successes cannot report how often the deterministic path was
+/// bypassed — which is the whole risk of letting a model fill gaps.
+model ScanRecommendationRun {
+  id     String @id @default(cuid())
+  scanId String @unique
+  scan   Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  /// Candidates the engine considered after tenant scoping.
+  candidateCount Int @default(0)
+  /// How many the safety and relevance passes removed, by reason.
+  exclusions     Json?
+  /// Slots the engine filled itself.
+  engineCount    Int @default(0)
+  /// Slots handed to the model because the engine could not fill them.
+  gapFillCount   Int @default(0)
+  gapFillReason  GapFillReason?
+  /// Whether the engine reached its own minimum for a confident answer.
+  confident      Boolean @default(false)
+
+  weightsVersion String?
+  /// Set when a clinic's own weights were used rather than Aurora's defaults.
+  usedClinicWeights Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([confident])
+  @@map("scan_recommendation_run")
+}
+
+/// What a person thought of one recommendation.
+///
+/// Attached to the recommendation rather than the scan, because "this scan was
+/// useful" cannot tell you which of four products was the useful one. That
+/// distinction is the only thing that makes the feedback loop able to inform
+/// the weights.
+model RecommendationFeedback {
+  id               String             @id @default(cuid())
+  recommendationId String             @unique
+  recommendation   ScanRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  verdict RecommendationVerdict
+  /// Optional free text. Never required, so a verdict is always cheap to give.
+  note    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([verdict])
+  @@index([createdAt])
+  @@map("recommendation_feedback")
+}
+
+/// A person's judgement of one recommendation.
+///
+/// `already_use` is separate from `helpful` on purpose: it says the engine
+/// agreed with a choice the person had already made, which is corroboration
+/// rather than a new suggestion they acted on. Counting the two together would
+/// overstate how often the engine told anyone something they did not know.
+enum RecommendationVerdict {
+  helpful
+  not_relevant
+  already_use
+  /// Cosmetic mismatch — too rich, too drying, disliked texture.
+  did_not_suit
+}
+
+// ─── product ingestion ──────────────────────────────────────────────────────
+
+/// Where a product entered Aurora from.
+///
+/// `fallback` is not a synonym for `manual`. The seed file is a snapshot of
+/// the store catalogue used when WooCommerce is unreachable, so a product from
+/// it was neither typed in by an administrator nor fetched from the store —
+/// and calling it either would misreport how it arrived. It also has no
+/// external id, which is exactly why a re-sync cannot yet match it.
+enum ProductSource {
+  woocommerce
+  manual
+  fallback
+}
+
+enum ProductSyncStatus {
+  running
+  succeeded
+  failed
+}
+
+/// One catalogue synchronisation, and what it did.
+///
+/// Persisted rather than derived so the admin surface reports real numbers
+/// instead of counting rows and guessing. A run row is written when the sync
+/// starts and finished when it ends, so a sync that dies mid-flight is visible
+/// as `running` long after it stopped rather than silently absent.
+model ProductSyncRun {
+  id     String            @id @default(cuid())
+  source ProductSource
+  status ProductSyncStatus @default(running)
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  /// Products the source reported.
+  discovered Int @default(0)
+  created    Int @default(0)
+  updated    Int @default(0)
+  /// Present in the source and identical to what Aurora already held.
+  unchanged  Int @default(0)
+  /// Aurora products the source no longer lists. Archived, never deleted:
+  /// historical recommendations must keep resolving.
+  archived   Int @default(0)
+  /// Products whose source changed in a way that invalidates their intelligence.
+  markedStale Int @default(0)
+  failed     Int @default(0)
+
+  /// First error, for a failed run. Never carries credentials.
+  error String?
+
+  /// Who started it. A plain id rather than a relation, so sync history
+  /// survives the administrator's account being deleted.
+  actorId String?
+
+  @@index([startedAt])
+  @@index([status])
+  @@map("product_sync_run")
+}
+
+/// Where a product is in the intelligence extraction lifecycle.
+///
+/// Separate from DataConfidence, which records whether a person has checked the
+/// result. These are different questions — "has the system derived this yet"
+/// and "has anybody confirmed it" — and a single field answering both would
+/// make an automated extraction indistinguishable from human sign-off.
+enum ProductIntelligenceStatus {
+  /// Never extracted, or the source has changed since it was.
+  pending
+  /// An extraction is running. Set before the model call and cleared after, so
+  /// a second automatic extraction cannot start for the same product.
+  extracting
+  /// Extracted, and complete enough for the engine to reason about.
+  extracted
+  /// Extracted, but too little was established for the engine to rely on it.
+  /// The product stays saved and listed; it is simply not yet recommendable.
+  needs_review
+  /// The extraction itself failed. The product is unaffected and can be retried.
+  failed
+}
+
+// ─── product intelligence jobs ──────────────────────────────────────────────
+
+/// What a queued unit of product work does.
+enum ProductJobKind {
+  /// Extract one product's intelligence through the shared service.
+  intelligence_extraction
+  /// Reconcile the catalogue against its source. Reserved for the WooCommerce
+  /// sync, which is structurally ready and dormant until credentials exist.
+  catalogue_sync
+}
+
+enum ProductJobStatus {
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+}
+
+/// One durable unit of product-intelligence work.
+///
+/// The queue exists because the application runs on serverless functions and
+/// has no long-lived worker process. Bulk extraction previously ran from the
+/// browser, one request per product, which meant closing the tab abandoned
+/// whatever was left. A row here survives the tab, the request, the deploy and
+/// the process — the work is a record in Postgres, and anything that can reach
+/// the database can pick it up.
+///
+/// Reference ids are plain columns without foreign keys, following AiUsage: a
+/// job is a record of work that was requested, and it should outlive the
+/// deletion of the product or the person who asked for it.
+model ProductJob {
+  id     String           @id @default(cuid())
+  kind   ProductJobKind
+  status ProductJobStatus @default(queued)
+
+  /// The product this job acts on. Null for catalogue-wide work.
+  productId String?
+  /// The tenant whose catalogue this belongs to. Null is Aurora's own.
+  ///
+  /// Recorded at enqueue from the caller's resolved scope, never from a
+  /// payload, so a job cannot be created against a catalogue the requester
+  /// could not otherwise reach.
+  organizationId String?
+  /// Groups the jobs of one bulk run so it can be reported as a single thing.
+  batchId String?
+
+  attempts    Int @default(0)
+  maxAttempts Int @default(3)
+
+  /// Not eligible to run before this. Carries both retry backoff and the
+  /// deferral applied when the provider's daily allowance is exhausted.
+  runAfter DateTime @default(now())
+
+  /// Lease held by whichever drain claimed this job.
+  ///
+  /// A serverless function can be killed mid-job, leaving a row `running`
+  /// forever. The lease timestamp is what lets a later drain tell a job that is
+  /// genuinely in flight from one whose worker died.
+  lockedAt DateTime?
+  lockedBy String?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  /// Why the last attempt failed. Never carries credentials or prompts.
+  error  String?
+  result Json?
+
+  /// Whether this run should bypass the "already extracted" guard. Set when an
+  /// administrator explicitly asked, not when work was scheduled automatically.
+  force Boolean @default(false)
+
+  requestedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The claim query orders by this pair, so it is the index that matters.
+  @@index([status, runAfter])
+  @@index([batchId])
+  @@index([organizationId])
+  @@index([productId])
+  @@map("product_job")
+}
